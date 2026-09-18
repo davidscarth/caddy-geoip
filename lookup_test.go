@@ -126,6 +126,17 @@ func TestCountryPlaceholder(t *testing.T) {
 	if got := repl.ReplaceAll("{geoip.country}", ""); got != "GB" {
 		t.Errorf("placeholder: expected GB, got %q", got)
 	}
+
+	// An unknown IP must still set the placeholder, to an empty string,
+	// so that log_append records "" rather than the literal placeholder.
+	r = newRequest("10.1.2.3:1234")
+	if _, err := m.MatchWithError(r); err != nil {
+		t.Fatal(err)
+	}
+	repl = r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if v, known := repl.Get("geoip.country"); !known || v != "" {
+		t.Errorf("unknown IP: expected known empty placeholder, got known=%v value=%q", known, v)
+	}
 }
 
 func TestClientIPHonorsTrustedProxyVar(t *testing.T) {
