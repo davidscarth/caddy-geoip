@@ -189,6 +189,15 @@ run in the request.
 }
 ```
 
+## Checks
+
+Every commit is expected to pass:
+
+- `go vet ./...` and `go test ./...`
+- `golangci-lint run` using Caddy's own `.golangci.yml`
+- `govulncheck ./...` with no reachable vulnerabilities
+- CodeQL via GitHub code scanning
+
 ## License
 
 Apache-2.0
