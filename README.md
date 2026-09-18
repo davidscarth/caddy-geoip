@@ -13,7 +13,7 @@ It works, but it always just irked me when looking at my Caddyfile.
 This plugin follows three rules:
 
 1. **A matcher means one thing.** `geoip_country { country RU CN }` is true
-   when the client *is in* Russia or China. Nothing else. A deny list is that
+   when the client *is in* Russia or China. That's it. A deny list is that
    matcher plus Caddy's `abort`. An allow list is `not` on the matcher.
 2. **Defer to Caddy.** Blocking, responding, redirecting, negating, combining
    conditions, exempting the LAN, logging: Caddy already does all of these.
