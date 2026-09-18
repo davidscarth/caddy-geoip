@@ -114,9 +114,9 @@ log_append geo_country {geoip.country}
 
 The lines inside `handle @blocked` tag denied requests with their country, the
 one after it tags everything that passed (useful for testing to see what you
-might want to add to your blocklist). Either one is optional. The placeholder
-is set only after a matcher has run, so these go after the block, inside a
-`route` if your site uses one.
+might want to add to your blocklist). The placeholder is set only after a
+matcher has run, so these go after the block. To log only blocked requests,
+replace the last line with Caddy's `log_skip`.
 
 Block hosting providers regardless of country:
 
