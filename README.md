@@ -191,7 +191,7 @@ run in the request.
 
 ## Checks
 
-Every commit is expected to pass:
+The code passes:
 
 - `go vet ./...` and `go test ./...`
 - `golangci-lint run` using Caddy's own `.golangci.yml`
