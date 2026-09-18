@@ -1,0 +1,8 @@
+The .mmdb files in this directory are test databases from
+https://github.com/maxmind/MaxMind-DB
+
+Copyright (c) 2013 - 2024 by MaxMind, Inc.
+
+They are distributed here under the Apache License, Version 2.0,
+one of the two licenses MaxMind offers them under. See the LICENSE
+file in the repository root for the full license text.
