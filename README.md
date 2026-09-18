@@ -226,6 +226,10 @@ The code passes:
 - `govulncheck ./...` with no reachable vulnerabilities
 - CodeQL via GitHub code scanning
 
+Tested against MaxMind's `GeoLite2-Country`, `GeoIP2-Country`, and
+`GeoLite2-ASN` test databases, and running in production with the free
+GeoLite2 editions.
+
 ## License
 
 Apache-2.0
