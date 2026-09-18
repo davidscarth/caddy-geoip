@@ -99,6 +99,25 @@ respond @blocked "Not available in {geoip.country}" 451
 redir @outside https://example.com/blocked
 ```
 
+Log the country. Aborted requests already get an access-log line (status 0,
+with the client IP) but no country code. This `log_append` can be used to add
+that detail:
+
+```caddyfile
+handle @blocked {
+    log_append geo_country {geoip.country}
+    log_append geo_blocked true
+    abort
+}
+log_append geo_country {geoip.country}
+```
+
+The lines inside `handle @blocked` tag denied requests with their country, the
+one after it tags everything that passed (useful for testing to see what you
+might want to add to your blocklist). Either one is optional. The placeholder
+is set only after a matcher has run, so these go after the block, inside a
+`route` if your site uses one.
+
 Block hosting providers regardless of country:
 
 ```caddyfile
