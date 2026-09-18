@@ -54,7 +54,7 @@ Requires Go 1.25+ to build.
   an error rather than a silent no-match. Placeholders such as `{env.GEOIP_DB}`
   are resolved.
 - **country** - ISO 3166-1 alpha-2 codes, case-insensitive.
-- **asn** - autonomous system numbers as plain integers.
+- **asn** - autonomous system numbers as plain integers, no AS prefix.
 - **match_unknown** - also match IPs the database has no entry for (loopback,
   private ranges, unallocated space). Off by default: an unknown IP is never
   *in* a set. Under `not` that means it is always *outside* one; see the
