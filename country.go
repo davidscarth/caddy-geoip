@@ -50,6 +50,9 @@ func (MatchGeoIPCountry) CaddyModule() caddy.ModuleInfo {
 func (m *MatchGeoIPCountry) Provision(caddy.Context) error {
 	m.countries = make(map[string]struct{}, len(m.Countries))
 	for _, c := range m.Countries {
+		if !isCountryCode(c) {
+			return fmt.Errorf("invalid country code %q", c)
+		}
 		m.countries[strings.ToUpper(c)] = struct{}{}
 	}
 	var err error
@@ -86,7 +89,7 @@ func (m *MatchGeoIPCountry) MatchWithError(r *http.Request) (bool, error) {
 	if code == "" {
 		return m.MatchUnknown, nil
 	}
-	_, ok := m.countries[code]
+	_, ok := m.countries[strings.ToUpper(code)]
 	return ok, nil
 }
 
@@ -96,6 +99,22 @@ func (m *MatchGeoIPCountry) country(ip netip.Addr) (string, error) {
 	var code string
 	err := m.db.Lookup(ip).DecodePath(&code, "country", "iso_code")
 	return code, err
+}
+
+// isCountryCode reports whether s has the shape of an ISO 3166-1
+// alpha-2 code: exactly two ASCII letters. It does not check the code
+// is assigned, since databases also emit codes such as EU and AP.
+func isCountryCode(s string) bool {
+	if len(s) != 2 {
+		return false
+	}
+	for i := 0; i < 2; i++ {
+		c := s[i] | 0x20 // fold to lower case
+		if c < 'a' || c > 'z' {
+			return false
+		}
+	}
+	return true
 }
 
 // UnmarshalCaddyfile sets up the matcher from Caddyfile tokens. Syntax:
@@ -118,7 +137,11 @@ func (m *MatchGeoIPCountry) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 			case "country":
-				m.Countries = append(m.Countries, d.RemainingArgs()...)
+				args := d.RemainingArgs()
+				if len(args) == 0 {
+					return d.ArgErr()
+				}
+				m.Countries = append(m.Countries, args...)
 			case "match_unknown":
 				if d.NextArg() {
 					return d.ArgErr()

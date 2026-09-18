@@ -24,15 +24,15 @@ func openDB(path string, types ...string) (*maxminddb.Reader, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening db: %v", err)
 	}
-	got := strings.ToLower(db.Metadata.DatabaseType)
+	dbType := db.Metadata.DatabaseType
 	for _, t := range types {
-		if strings.Contains(got, t) {
+		if strings.Contains(strings.ToLower(dbType), t) {
 			return db, nil
 		}
 	}
 	_ = db.Close()
 	return nil, fmt.Errorf("db %s is a %s database, expected %s",
-		path, db.Metadata.DatabaseType, strings.Join(types, " or "))
+		path, dbType, strings.Join(types, " or "))
 }
 
 // lookup returns the value for the client of r, computing it with fn
@@ -61,6 +61,8 @@ func lookup(r *http.Request, key string, fn func(netip.Addr) (string, error)) (s
 
 // clientIP returns the client IP as resolved by the server (honoring
 // trusted_proxies), falling back to the connection's remote address.
+// An address that cannot be parsed, which only happens on Unix socket
+// listeners, yields an invalid Addr and is treated as unknown.
 func clientIP(r *http.Request) netip.Addr {
 	addr, _ := caddyhttp.GetVar(r.Context(), caddyhttp.ClientIPVarKey).(string)
 	if addr == "" {

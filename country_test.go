@@ -47,6 +47,13 @@ func TestCountryUnmarshalCaddyfile(t *testing.T) {
 			}`,
 			wantErr: true,
 		},
+		{
+			input: `geoip_country {
+				db /tmp/Country.mmdb
+				country
+			}`,
+			wantErr: true,
+		},
 	} {
 		var m MatchGeoIPCountry
 		err := m.UnmarshalCaddyfile(caddyfile.NewTestDispenser(tc.input))
@@ -68,6 +75,27 @@ func TestCountryUnmarshalCaddyfile(t *testing.T) {
 		}
 		if m.MatchUnknown != tc.wantUnknown {
 			t.Errorf("Test %d: expected match_unknown=%v, got %v", i, tc.wantUnknown, m.MatchUnknown)
+		}
+	}
+}
+
+func TestIsCountryCode(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want bool
+	}{
+		{"US", true},
+		{"us", true},
+		{"EU", true},
+		{"USA", false},
+		{"U", false},
+		{"12", false},
+		{"U1", false},
+		{"", false},
+		{"ÜS", false},
+	} {
+		if got := isCountryCode(tc.in); got != tc.want {
+			t.Errorf("isCountryCode(%q) = %v, want %v", tc.in, got, tc.want)
 		}
 	}
 }

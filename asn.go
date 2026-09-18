@@ -51,8 +51,8 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 	m.asns = make(map[string]struct{}, len(m.ASNs))
 	for _, a := range m.ASNs {
 		n, err := strconv.ParseUint(a, 10, 32)
-		if err != nil {
-			return fmt.Errorf("invalid asn %q: %v", a, err)
+		if err != nil || n == 0 {
+			return fmt.Errorf("invalid asn %q", a)
 		}
 		m.asns[strconv.FormatUint(n, 10)] = struct{}{}
 	}
@@ -127,7 +127,11 @@ func (m *MatchGeoIPASN) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 			case "asn":
-				m.ASNs = append(m.ASNs, d.RemainingArgs()...)
+				args := d.RemainingArgs()
+				if len(args) == 0 {
+					return d.ArgErr()
+				}
+				m.ASNs = append(m.ASNs, args...)
 			case "match_unknown":
 				if d.NextArg() {
 					return d.ArgErr()
