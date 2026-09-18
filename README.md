@@ -20,7 +20,7 @@ This plugin follows three rules:
    Don't duplicate something Caddy already does well.
 3. **Current and small.** Built against Caddy v2.11.4 and maxminddb-golang
    v2.6.0. No background goroutines, no shared state, and no dependencies
-   beyond those two. ~250 lines of code.
+   beyond those two. ~280 lines of code.
 
 Not related to `aablinov/caddy-geoip`.
 
