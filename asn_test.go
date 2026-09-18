@@ -42,6 +42,14 @@ func TestASNUnmarshalCaddyfile(t *testing.T) {
 			}`,
 			wantErr: true,
 		},
+		{
+			input: `geoip_asn {
+				db /tmp/ASN.mmdb
+				db /tmp/Other.mmdb
+				asn 16509
+			}`,
+			wantErr: true,
+		},
 	} {
 		var m MatchGeoIPASN
 		err := m.UnmarshalCaddyfile(caddyfile.NewTestDispenser(tc.input))

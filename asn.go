@@ -24,7 +24,7 @@ func init() {
 // GeoIP2 ASN database. Use Caddy's `not` for the complement, and
 // Caddy's `abort`, `respond`, or `redir` to act on the match.
 type MatchGeoIPASN struct {
-	// Path to the ASN database. Supports placeholders.
+	// Path to an ASN, ISP, or Enterprise database. Supports placeholders.
 	DB string `json:"db,omitempty"`
 
 	// Autonomous system numbers to match, as plain integers.
@@ -46,8 +46,12 @@ func (MatchGeoIPASN) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
-// Provision builds the ASN set and opens the database.
+// Provision builds the ASN set and opens the database. A missing db
+// is left for Validate to report.
 func (m *MatchGeoIPASN) Provision(caddy.Context) error {
+	if m.DB == "" {
+		return nil
+	}
 	m.asns = make(map[string]struct{}, len(m.ASNs))
 	for _, a := range m.ASNs {
 		n, err := strconv.ParseUint(a, 10, 32)
@@ -57,7 +61,7 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 		m.asns[strconv.FormatUint(n, 10)] = struct{}{}
 	}
 	var err error
-	m.db, err = openDB(m.DB, "asn")
+	m.db, err = openDB(m.DB, "asn", "isp", "enterprise")
 	return err
 }
 
@@ -123,6 +127,9 @@ func (m *MatchGeoIPASN) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 		for nesting := d.Nesting(); d.NextBlock(nesting); {
 			switch d.Val() {
 			case "db":
+				if m.DB != "" {
+					return d.Err("db already specified")
+				}
 				if !d.AllArgs(&m.DB) {
 					return d.ArgErr()
 				}

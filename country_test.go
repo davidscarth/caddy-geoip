@@ -54,6 +54,14 @@ func TestCountryUnmarshalCaddyfile(t *testing.T) {
 			}`,
 			wantErr: true,
 		},
+		{
+			input: `geoip_country {
+				db /tmp/Country.mmdb
+				db /tmp/Other.mmdb
+				country US
+			}`,
+			wantErr: true,
+		},
 	} {
 		var m MatchGeoIPCountry
 		err := m.UnmarshalCaddyfile(caddyfile.NewTestDispenser(tc.input))

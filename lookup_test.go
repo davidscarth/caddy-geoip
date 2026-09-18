@@ -38,17 +38,17 @@ func newRequest(remoteAddr string) *http.Request {
 
 func TestOpenDBTypeCheck(t *testing.T) {
 	for _, f := range []string{countryDB, countryDB2} {
-		db, err := openDB(f, "country", "city")
+		db, err := openDB(f, "country", "city", "enterprise")
 		if err != nil {
 			t.Fatalf("opening %s: %v", f, err)
 		}
 		_ = db.Close()
 	}
 
-	if _, err := openDB(asnDB, "country", "city"); err == nil {
+	if _, err := openDB(asnDB, "country", "city", "enterprise"); err == nil {
 		t.Error("expected error opening ASN db as a country db")
 	}
-	if _, err := openDB(countryDB, "asn"); err == nil {
+	if _, err := openDB(countryDB, "asn", "isp", "enterprise"); err == nil {
 		t.Error("expected error opening country db as an ASN db")
 	}
 	if _, err := openDB("testdata/does-not-exist.mmdb", "country"); err == nil {
@@ -110,7 +110,7 @@ func TestCountryMatchUnknown(t *testing.T) {
 	}
 }
 
-func TestCountryPlaceholderAndCache(t *testing.T) {
+func TestCountryPlaceholder(t *testing.T) {
 	m := MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}}
 
 	if err := m.Provision(caddy.Context{}); err != nil {
@@ -125,9 +125,6 @@ func TestCountryPlaceholderAndCache(t *testing.T) {
 	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if got := repl.ReplaceAll("{geoip.country}", ""); got != "GB" {
 		t.Errorf("placeholder: expected GB, got %q", got)
-	}
-	if got, _ := caddyhttp.GetVar(r.Context(), "geoip.country").(string); got != "GB" {
-		t.Errorf("cached var: expected GB, got %q", got)
 	}
 }
 

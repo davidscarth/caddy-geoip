@@ -35,15 +35,10 @@ func openDB(path string, types ...string) (*maxminddb.Reader, error) {
 		path, dbType, strings.Join(types, " or "))
 }
 
-// lookup returns the value for the client of r, computing it with fn
-// on the first call and caching it in the request context under key.
-// The value is also exposed as a placeholder of the same name.
-func lookup(r *http.Request, key string, fn func(netip.Addr) (string, error)) (string, error) {
-	ctx := r.Context()
-	if v, ok := caddyhttp.GetVar(ctx, key).(string); ok {
-		return v, nil
-	}
-
+// lookup returns the value for the client of r, computed by fn, and
+// exposes it as the named placeholder. An IP that cannot be resolved
+// yields an empty string.
+func lookup(r *http.Request, placeholder string, fn func(netip.Addr) (string, error)) (string, error) {
 	var v string
 	if ip := clientIP(r); ip.IsValid() {
 		var err error
@@ -51,10 +46,8 @@ func lookup(r *http.Request, key string, fn func(netip.Addr) (string, error)) (s
 			return "", err
 		}
 	}
-
-	caddyhttp.SetVar(ctx, key, v)
-	if repl, ok := ctx.Value(caddy.ReplacerCtxKey).(*caddy.Replacer); ok {
-		repl.Set(key, v)
+	if repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer); ok {
+		repl.Set(placeholder, v)
 	}
 	return v, nil
 }

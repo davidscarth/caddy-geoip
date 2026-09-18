@@ -48,10 +48,11 @@ Requires Go 1.25+ to build.
 }
 ```
 
-- **db** - path to the Country (or City) database for `geoip_country`, or the
-  ASN database for `geoip_asn`. The database type is checked when the config
-  loads, so pointing one matcher at the other's file is an error rather than a
-  silent no-match. Placeholders such as `{env.GEOIP_DB}` are resolved.
+- **db** - path to a Country, City, or Enterprise database for `geoip_country`,
+  or an ASN, ISP, or Enterprise database for `geoip_asn`. The database type is
+  checked when the config loads, so pointing one matcher at the other's file is
+  an error rather than a silent no-match. Placeholders such as `{env.GEOIP_DB}`
+  are resolved.
 - **country** - ISO 3166-1 alpha-2 codes, case-insensitive.
 - **asn** - autonomous system numbers as plain integers.
 - **match_unknown** - also match IPs the database has no entry for (loopback,
@@ -174,8 +175,7 @@ example.com {
 ## Placeholders
 
 `{geoip.country}` and `{geoip.asn}` hold the client's ISO code and AS number,
-or are empty if unknown. Each is set once the corresponding matcher has first
-run in the request.
+or are empty if unknown. Each is set by the corresponding matcher when it runs.
 
 ## Notes
 
@@ -188,8 +188,11 @@ run in the request.
   your database updates run `caddy reload` afterward. Replace the file
   atomically (write to a temporary name, then rename) so a partially written
   file is never opened.
-- Each lookup happens once per request and is shared by every matcher of that
-  kind in the route. Only the one field needed is decoded from the record.
+- Each matcher does its own lookup when it runs, decoding only the one field it
+  needs from the record. There is no per-request caching.
+- `geoip_country` matches on MaxMind's located `country`, not
+  `registered_country`. An IP whose location MaxMind cannot determine is
+  unknown.
 - If the lookup fails, the matcher returns an error and Caddy fails the
   request rather than letting it through.
 

@@ -24,7 +24,7 @@ func init() {
 // Country (or City) database. Use Caddy's `not` for the complement,
 // and Caddy's `abort`, `respond`, or `redir` to act on the match.
 type MatchGeoIPCountry struct {
-	// Path to the Country database. Supports placeholders.
+	// Path to a Country, City, or Enterprise database. Supports placeholders.
 	DB string `json:"db,omitempty"`
 
 	// ISO 3166-1 alpha-2 country codes to match. Case-insensitive.
@@ -46,8 +46,12 @@ func (MatchGeoIPCountry) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
-// Provision builds the country set and opens the database.
+// Provision builds the country set and opens the database. A missing
+// db is left for Validate to report.
 func (m *MatchGeoIPCountry) Provision(caddy.Context) error {
+	if m.DB == "" {
+		return nil
+	}
 	m.countries = make(map[string]struct{}, len(m.Countries))
 	for _, c := range m.Countries {
 		if !isCountryCode(c) {
@@ -56,7 +60,7 @@ func (m *MatchGeoIPCountry) Provision(caddy.Context) error {
 		m.countries[strings.ToUpper(c)] = struct{}{}
 	}
 	var err error
-	m.db, err = openDB(m.DB, "country", "city")
+	m.db, err = openDB(m.DB, "country", "city", "enterprise")
 	return err
 }
 
@@ -108,7 +112,7 @@ func isCountryCode(s string) bool {
 	if len(s) != 2 {
 		return false
 	}
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		c := s[i] | 0x20 // fold to lower case
 		if c < 'a' || c > 'z' {
 			return false
@@ -133,6 +137,9 @@ func (m *MatchGeoIPCountry) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 		for nesting := d.Nesting(); d.NextBlock(nesting); {
 			switch d.Val() {
 			case "db":
+				if m.DB != "" {
+					return d.Err("db already specified")
+				}
 				if !d.AllArgs(&m.DB) {
 					return d.ArgErr()
 				}
