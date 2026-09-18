@@ -210,6 +210,12 @@ or are empty if unknown. Each is set by the corresponding matcher when it runs.
   }
 }
 ```
+## Out of scope
+
+City and subdivision matching, database auto-download, and rich placeholders
+(city name, coordinates, time zone) are deliberately not here.
+
+Database updates are either manually placed or `geoipupdate` plus `caddy reload`.
 
 ## Checks
 
