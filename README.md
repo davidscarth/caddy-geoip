@@ -134,8 +134,8 @@ this network" is a single condition rather than two rules that need ordering:
 
 ```caddyfile
 @blocked {
-    geoip_country { db "…Country.mmdb"  country RU }
-    not geoip_asn { db "…ASN.mmdb"  asn 64496 }
+    geoip_country { db "Country.mmdb"  country RU }
+    not geoip_asn { db "ASN.mmdb"  asn 64496 }
 }
 abort @blocked
 ```
