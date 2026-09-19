@@ -225,7 +225,6 @@ func TestASNProvisionRejects(t *testing.T) {
 	for _, bad := range []string{"0", "AS1221", "-1", "abc", "4294967296"} {
 		m := MatchGeoIPASN{DB: asnDB, ASNs: []string{bad}}
 		if err := m.Provision(caddy.Context{}); err == nil {
-			t.Cleanup(func() { _ = m.Cleanup() })
 			t.Errorf("expected provision to reject asn %q", bad)
 		}
 	}
@@ -235,7 +234,6 @@ func TestCountryProvisionRejects(t *testing.T) {
 	for _, bad := range []string{"USA", "U", "12", ""} {
 		m := MatchGeoIPCountry{DB: countryDB, Countries: []string{bad}}
 		if err := m.Provision(caddy.Context{}); err == nil {
-			t.Cleanup(func() { _ = m.Cleanup() })
 			t.Errorf("expected provision to reject country %q", bad)
 		}
 	}
