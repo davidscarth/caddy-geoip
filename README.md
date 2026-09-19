@@ -55,8 +55,9 @@ Requires Go 1.25+ to build.
 }
 ```
 
-`db` is required on every matcher, along with at least one country, subdivision
-or asn. `geoip_subdivision` also requires country, which scopes the codes.
+`db` is required on every matcher, along with at least one `country`,
+`subdivision` or `asn`. `geoip_subdivision` also requires `country`, which
+scopes the codes. `match_unknown` is optional everywhere.
 
 - **db** - path to a Country, City, or Enterprise database for `geoip_country`,
   a City or Enterprise database for `geoip_subdivision`, or an ASN, ISP, or
