@@ -26,7 +26,7 @@ func openDB(path string, types ...string) (*maxminddb.Reader, error) {
 	}
 	dbType := db.Metadata.DatabaseType
 	for _, t := range types {
-		if strings.Contains(strings.ToLower(dbType), t) {
+		if strings.Contains(strings.ToLower(dbType), strings.ToLower(t)) {
 			return db, nil
 		}
 	}
