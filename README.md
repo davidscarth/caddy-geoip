@@ -72,11 +72,12 @@ scopes the codes. `match_unknown` is optional everywhere.
   `US-CA`), case-insensitive. Together with **country** they form the full
   code: `country US` with `subdivision CA` is `US-CA`.
 - **asn** - autonomous system numbers as plain integers, no `AS` prefix.
-- **match_unknown** - also match IPs the database has no entry for (loopback,
-  private ranges, unallocated space). On `geoip_subdivision` a record with a
-  country but no subdivision counts as unknown too. Off by default: an unknown
-  IP is never *in* a set. Under `not` that means it is always *outside* one
-  (see the allow-list example).
+- **match_unknown** - use with caution. Matches IPs the database has no entry
+  for (loopback, private ranges, unallocated space), so `country US` with
+  `match_unknown` matches a US client and your LAN. On `geoip_subdivision` a
+  record with a country but no subdivision counts as unknown too. Off by
+  default. Under `not` it makes an allow list fail open, so prefer
+  `client_ip private_ranges` to exempt the LAN.
 
 ## Examples
 
