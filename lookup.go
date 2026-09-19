@@ -20,6 +20,12 @@ import (
 // Country database is not silently used for ASN matching or vice versa.
 func openDB(path string, types ...string) (*maxminddb.Reader, error) {
 	path = caddy.NewReplacer().ReplaceAll(path, "")
+	if path == "" {
+		// An unset placeholder such as {env.GEOIP_DB} replaces to
+		// nothing, which would otherwise fail as a missing file with
+		// no path to name.
+		return nil, fmt.Errorf("db path is empty after placeholder replacement")
+	}
 	db, err := maxminddb.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("opening db: %w", err)

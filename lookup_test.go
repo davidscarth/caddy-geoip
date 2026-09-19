@@ -79,16 +79,27 @@ func TestOpenDBTypeCheck(t *testing.T) {
 	if _, err := openDB("testdata/does-not-exist.mmdb", "country"); err == nil {
 		t.Error("expected error opening missing file")
 	}
+
+	// An unset placeholder replaces to nothing; the error should say so
+	// rather than report a missing file with no name.
+	_, err := openDB("{env.CADDY_GEOIP_TEST_UNSET}", "country")
+	if err == nil {
+		t.Fatal("expected error opening an empty path")
+	}
+	if !strings.Contains(err.Error(), "placeholder") {
+		t.Errorf("expected the error to mention placeholder replacement, got %v", err)
+	}
 }
 
 func TestCountryMatch(t *testing.T) {
 	m := MatchGeoIPCountry{DB: countryDB, Countries: []string{"gb", "US", "JP"}}
 
-	if err := m.Validate(); err != nil {
-		t.Fatalf("validate: %v", err)
-	}
+	// Caddy provisions before it validates.
 	if err := m.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision: %v", err)
+	}
+	if err := m.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
 	}
 	t.Cleanup(func() { _ = m.Cleanup() })
 
@@ -228,11 +239,12 @@ func TestClientIPHonorsTrustedProxyVar(t *testing.T) {
 func TestASNMatch(t *testing.T) {
 	m := MatchGeoIPASN{DB: asnDB, ASNs: []string{"001221"}} // leading zeros normalized
 
-	if err := m.Validate(); err != nil {
-		t.Fatalf("validate: %v", err)
-	}
+	// Caddy provisions before it validates.
 	if err := m.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision: %v", err)
+	}
+	if err := m.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
 	}
 	t.Cleanup(func() { _ = m.Cleanup() })
 
