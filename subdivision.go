@@ -65,10 +65,14 @@ func (MatchGeoIPSubdivision) CaddyModule() caddy.ModuleInfo {
 }
 
 // Provision builds the subdivision set and opens the database. A
-// missing db is left for Validate to report.
+// missing db or country is left for Validate to report, since its
+// messages explain what is required and why.
 func (m *MatchGeoIPSubdivision) Provision(caddy.Context) error {
 	if m.DB == "" {
 		return nil
+	}
+	if m.Country == "" {
+		return nil // Validate reports the requirement, and why
 	}
 	if !isCountryCode(m.Country) {
 		return fmt.Errorf("invalid country code %q", m.Country)

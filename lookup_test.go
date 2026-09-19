@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/caddyserver/caddy/v2"
@@ -81,7 +82,7 @@ func TestOpenDBTypeCheck(t *testing.T) {
 }
 
 func TestCountryMatch(t *testing.T) {
-	m := MatchGeoIPCountry{DB: countryDB, Countries: []string{"gb", "US"}}
+	m := MatchGeoIPCountry{DB: countryDB, Countries: []string{"gb", "US", "JP"}}
 
 	if err := m.Validate(); err != nil {
 		t.Fatalf("validate: %v", err)
@@ -101,6 +102,7 @@ func TestCountryMatch(t *testing.T) {
 		{"10.1.2.3:1234", false},           // private, no record
 		{"127.0.0.1:1234", false},          // loopback, no record
 		{"[::ffff:81.2.69.142]:1234", true}, // IPv4-mapped IPv6
+		{"[2001:218::1]:1234", true},       // native IPv6, JP
 		{"[2a02:d500::1]:1234", false},     // record with no country field
 		{"not-an-address", false},          // unparseable, unknown
 	} {
@@ -164,35 +166,45 @@ func TestCountryPlaceholder(t *testing.T) {
 }
 
 func TestEarlyDataRejected(t *testing.T) {
-	m := MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}}
-
-	if err := m.Provision(caddy.Context{}); err != nil {
-		t.Fatalf("provision: %v", err)
-	}
-	t.Cleanup(func() { _ = m.Cleanup() })
-
-	// An incomplete handshake means 0-RTT early data, where the client
-	// IP is not yet verified; the request must be refused with 425.
-	r := newRequest("81.2.69.142:1234")
-	r.TLS = &tls.ConnectionState{HandshakeComplete: false}
-
-	match, err := m.MatchWithError(r)
-	if match {
-		t.Error("expected no match on incomplete handshake")
-	}
-	var handlerErr caddyhttp.HandlerError
-	if !errors.As(err, &handlerErr) {
-		t.Fatalf("expected a caddyhttp.HandlerError, got %v", err)
-	}
-	if handlerErr.StatusCode != http.StatusTooEarly {
-		t.Errorf("expected status %d, got %d", http.StatusTooEarly, handlerErr.StatusCode)
+	// The guard is copied into each matcher, so each copy is checked.
+	matchers := map[string]caddyhttp.RequestMatcherWithError{
+		"country": &MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}},
+		"asn":     &MatchGeoIPASN{DB: asnDB, ASNs: []string{"1221"}},
+		"subdivision": &MatchGeoIPSubdivision{
+			DB: cityDB, Country: "GB", Subdivisions: []string{"ENG"},
+		},
 	}
 
-	// A completed handshake is matched as usual.
-	r = newRequest("81.2.69.142:1234")
-	r.TLS = &tls.ConnectionState{HandshakeComplete: true}
-	if match, err := m.MatchWithError(r); err != nil || !match {
-		t.Errorf("expected GB to match after handshake, got %v (%v)", match, err)
+	for name, m := range matchers {
+		if err := m.(caddy.Provisioner).Provision(caddy.Context{}); err != nil {
+			t.Fatalf("%s: provision: %v", name, err)
+		}
+		t.Cleanup(func() { _ = m.(caddy.CleanerUpper).Cleanup() })
+
+		// An incomplete handshake means 0-RTT early data, where the
+		// client IP is not yet verified; refuse the request with 425.
+		r := newRequest("81.2.69.142:1234")
+		r.TLS = &tls.ConnectionState{HandshakeComplete: false}
+
+		match, err := m.MatchWithError(r)
+		if match {
+			t.Errorf("%s: expected no match on incomplete handshake", name)
+		}
+		var handlerErr caddyhttp.HandlerError
+		if !errors.As(err, &handlerErr) {
+			t.Errorf("%s: expected a caddyhttp.HandlerError, got %v", name, err)
+			continue
+		}
+		if handlerErr.StatusCode != http.StatusTooEarly {
+			t.Errorf("%s: expected status %d, got %d", name, http.StatusTooEarly, handlerErr.StatusCode)
+		}
+
+		// A completed handshake is matched as usual.
+		r = newRequest("81.2.69.142:1234")
+		r.TLS = &tls.ConnectionState{HandshakeComplete: true}
+		if _, err := m.MatchWithError(r); err != nil {
+			t.Errorf("%s: unexpected error after handshake: %v", name, err)
+		}
 	}
 }
 
@@ -228,9 +240,10 @@ func TestASNMatch(t *testing.T) {
 		remoteAddr string
 		want       bool
 	}{
-		{"1.128.0.1:1234", true},   // AS1221
-		{"10.1.2.3:1234", false},   // private, no record
-		{"8.8.8.8:1234", false},    // not in the test db
+		{"1.128.0.1:1234", true},      // AS1221
+		{"[2001:8000::1]:1234", true}, // AS1221 over native IPv6
+		{"10.1.2.3:1234", false},      // private, no record
+		{"8.8.8.8:1234", false},       // not in the test db
 	} {
 		got, err := m.MatchWithError(newRequest(tc.remoteAddr))
 		if err != nil {
@@ -240,6 +253,29 @@ func TestASNMatch(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("Test %d: %s: expected %v, got %v", i, tc.remoteAddr, tc.want, got)
 		}
+	}
+}
+
+func TestASNMatchUnknownAndPlaceholder(t *testing.T) {
+	// match_unknown and the placeholder name are separate lines in
+	// asn.go from the country matcher's, so they are checked here too.
+	m := MatchGeoIPASN{DB: asnDB, ASNs: []string{"1221"}, MatchUnknown: true}
+	if err := m.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	t.Cleanup(func() { _ = m.Cleanup() })
+
+	if got, _ := m.MatchWithError(newRequest("10.1.2.3:1234")); !got {
+		t.Error("expected an IP with no ASN record to match with match_unknown")
+	}
+
+	r := newRequest("1.128.0.1:1234")
+	if _, err := m.MatchWithError(r); err != nil {
+		t.Fatal(err)
+	}
+	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if got := repl.ReplaceAll("{geoip.asn}", ""); got != "1221" {
+		t.Errorf("placeholder: expected 1221, got %q", got)
 	}
 }
 
@@ -405,16 +441,66 @@ func TestSubdivisionRejectsCountryDatabase(t *testing.T) {
 }
 
 func TestSubdivisionProvisionRejects(t *testing.T) {
-	for _, bad := range []string{"", "USA", "U1", "U-"} {
+	// Malformed values are rejected here, naming the offender.
+	for _, bad := range []string{"USA", "U", "U1", "U-", "12"} {
 		m := MatchGeoIPSubdivision{DB: cityDB, Country: bad, Subdivisions: []string{"CA"}}
 		if err := m.Provision(caddy.Context{}); err == nil {
 			t.Errorf("expected provision to reject country %q", bad)
 		}
 	}
-	for _, bad := range []string{"", "CALI", "US-CA", "C A"} {
+	for _, bad := range []string{"", "CALI", "US-CA", "C A", "C.A"} {
 		m := MatchGeoIPSubdivision{DB: cityDB, Country: "US", Subdivisions: []string{bad}}
 		if err := m.Provision(caddy.Context{}); err == nil {
 			t.Errorf("expected provision to reject subdivision %q", bad)
+		}
+	}
+
+	// One bad code among good ones is still caught, and named.
+	m := MatchGeoIPSubdivision{DB: cityDB, Country: "US", Subdivisions: []string{"CA", "CALI", "NY"}}
+	err := m.Provision(caddy.Context{})
+	if err == nil {
+		t.Fatal("expected provision to reject a bad code among good ones")
+	}
+	if !strings.Contains(err.Error(), "CALI") {
+		t.Errorf("expected the error to name the offending code, got %v", err)
+	}
+}
+
+func TestSubdivisionMissingFieldsDeferToValidate(t *testing.T) {
+	// A missing required field passes Provision so that Validate can
+	// report what is required and why. Both still fail the config.
+	for _, tc := range []struct {
+		name string
+		m    MatchGeoIPSubdivision
+		want string
+	}{
+		{
+			name: "no db",
+			m:    MatchGeoIPSubdivision{Country: "US", Subdivisions: []string{"CA"}},
+			want: "db is required",
+		},
+		{
+			name: "no country",
+			m:    MatchGeoIPSubdivision{DB: cityDB, Subdivisions: []string{"CA"}},
+			want: "country is required",
+		},
+		{
+			name: "no subdivisions",
+			m:    MatchGeoIPSubdivision{DB: cityDB, Country: "US"},
+			want: "at least one subdivision is required",
+		},
+	} {
+		if err := tc.m.Provision(caddy.Context{}); err != nil {
+			t.Errorf("%s: expected Provision to defer, got %v", tc.name, err)
+		}
+		t.Cleanup(func() { _ = tc.m.Cleanup() })
+
+		err := tc.m.Validate()
+		if err == nil {
+			t.Fatalf("%s: expected Validate to reject", tc.name)
+		}
+		if !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: expected an error mentioning %q, got %v", tc.name, tc.want, err)
 		}
 	}
 }
