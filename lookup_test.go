@@ -26,6 +26,8 @@ const (
 	countryDB  = "testdata/GeoLite2-Country-Test.mmdb"
 	countryDB2 = "testdata/GeoIP2-Country-Test.mmdb" // paid-tier naming
 	asnDB      = "testdata/GeoLite2-ASN-Test.mmdb"
+	cityDB     = "testdata/GeoLite2-City-Test.mmdb"
+	cityDB2    = "testdata/GeoIP2-City-Test.mmdb"
 )
 
 // newRequest builds a request from the given remote address with the
@@ -53,6 +55,26 @@ func TestOpenDBTypeCheck(t *testing.T) {
 	if _, err := openDB(countryDB, "asn", "isp", "enterprise"); err == nil {
 		t.Error("expected error opening country db as an ASN db")
 	}
+	for _, f := range []string{cityDB, cityDB2} {
+		db, err := openDB(f, "city", "enterprise")
+		if err != nil {
+			t.Fatalf("opening %s: %v", f, err)
+		}
+		_ = db.Close()
+	}
+
+	// A City database carries country data too, so the country matcher
+	// accepts it; a Country database has no subdivisions, so the
+	// subdivision matcher must not accept one.
+	if db, err := openDB(cityDB, "country", "city", "enterprise"); err != nil {
+		t.Errorf("expected a City db to be usable for country matching: %v", err)
+	} else {
+		_ = db.Close()
+	}
+	if _, err := openDB(countryDB, "city", "enterprise"); err == nil {
+		t.Error("expected error opening country db as a city db")
+	}
+
 	if _, err := openDB("testdata/does-not-exist.mmdb", "country"); err == nil {
 		t.Error("expected error opening missing file")
 	}
@@ -235,6 +257,164 @@ func TestCountryProvisionRejects(t *testing.T) {
 		m := MatchGeoIPCountry{DB: countryDB, Countries: []string{bad}}
 		if err := m.Provision(caddy.Context{}); err == nil {
 			t.Errorf("expected provision to reject country %q", bad)
+		}
+	}
+}
+
+func TestSubdivisionMatch(t *testing.T) {
+	tests := []struct {
+		name         string
+		country      string
+		subdivisions []string
+		addr         string
+		want         bool
+	}{
+		{"state matches", "US", []string{"WA"}, "216.160.83.56:1234", true},
+		{"one of several", "US", []string{"CA", "NY", "WA"}, "216.160.83.56:1234", true},
+		{"other state", "US", []string{"CA"}, "216.160.83.56:1234", false},
+		{"lower case config", "us", []string{"wa"}, "216.160.83.56:1234", true},
+		{"single character code", "SE", []string{"E"}, "89.160.20.128:1234", true},
+		{"three character code", "GB", []string{"ENG"}, "81.2.69.142:1234", true},
+		// The country scopes the subdivision: WA is a US state, so a
+		// GB rule must not match it even though the code is listed.
+		{"country scopes the code", "GB", []string{"WA"}, "216.160.83.56:1234", false},
+		// Boxford reports ENG then WBK; only the most specific matches.
+		{"most specific matches", "GB", []string{"WBK"}, "2.125.160.216:1234", true},
+		{"more general does not", "GB", []string{"ENG"}, "2.125.160.216:1234", false},
+	}
+
+	for _, tc := range tests {
+		m := MatchGeoIPSubdivision{DB: cityDB, Country: tc.country, Subdivisions: tc.subdivisions}
+		if err := m.Provision(caddy.Context{}); err != nil {
+			t.Fatalf("%s: provision: %v", tc.name, err)
+		}
+
+		got, err := m.MatchWithError(newRequest(tc.addr))
+		if err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+		}
+		if got != tc.want {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+		_ = m.Cleanup()
+	}
+}
+
+func TestSubdivisionMatchUnknown(t *testing.T) {
+	tests := []struct {
+		name    string
+		country string
+		addr    string
+	}{
+		// Not in the database at all.
+		{"absent", "US", "10.1.2.3:1234"},
+		// In the database and in the configured country, but the
+		// record carries no subdivisions.
+		{"country without subdivisions", "BT", "67.43.156.1:1234"},
+	}
+
+	for _, tc := range tests {
+		for _, matchUnknown := range []bool{false, true} {
+			m := MatchGeoIPSubdivision{
+				DB:           cityDB,
+				Country:      tc.country,
+				Subdivisions: []string{"XX"},
+				MatchUnknown: matchUnknown,
+			}
+			if err := m.Provision(caddy.Context{}); err != nil {
+				t.Fatalf("%s: provision: %v", tc.name, err)
+			}
+
+			got, err := m.MatchWithError(newRequest(tc.addr))
+			if err != nil {
+				t.Errorf("%s: %v", tc.name, err)
+			}
+			if got != matchUnknown {
+				t.Errorf("%s (match_unknown=%v): got %v", tc.name, matchUnknown, got)
+			}
+			_ = m.Cleanup()
+		}
+	}
+}
+
+func TestSubdivisionCountryMismatchIsNotUnknown(t *testing.T) {
+	// A client located elsewhere is an answer, not a gap in the data,
+	// so match_unknown must not turn it into a match.
+	m := MatchGeoIPSubdivision{
+		DB:           cityDB,
+		Country:      "GB",
+		Subdivisions: []string{"ENG"},
+		MatchUnknown: true,
+	}
+	if err := m.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	t.Cleanup(func() { _ = m.Cleanup() })
+
+	r := newRequest("216.160.83.56:1234")
+	if got, _ := m.MatchWithError(r); got {
+		t.Error("expected a US address not to match a GB rule")
+	}
+
+	// The placeholders still report what the database knows, even
+	// though this matcher did not match.
+	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != "US-WA" {
+		t.Errorf("placeholders on a country mismatch: expected US-WA, got %q", got)
+	}
+}
+
+func TestSubdivisionPlaceholders(t *testing.T) {
+	m := MatchGeoIPSubdivision{DB: cityDB, Country: "GB", Subdivisions: []string{"WBK"}}
+	if err := m.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	t.Cleanup(func() { _ = m.Cleanup() })
+
+	r := newRequest("2.125.160.216:1234")
+	if _, err := m.MatchWithError(r); err != nil {
+		t.Fatal(err)
+	}
+	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != "GB-WBK" {
+		t.Errorf("placeholders: expected GB-WBK, got %q", got)
+	}
+
+	// An unknown IP must still set both, to empty strings, so that
+	// log_append records "" rather than the literal placeholders.
+	r = newRequest("10.1.2.3:1234")
+	if _, err := m.MatchWithError(r); err != nil {
+		t.Fatal(err)
+	}
+	repl = r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	for _, key := range []string{"geoip.country", "geoip.subdivision"} {
+		if v, known := repl.Get(key); !known || v != "" {
+			t.Errorf("unknown IP: %s known=%v value=%q", key, known, v)
+		}
+	}
+}
+
+func TestSubdivisionRejectsCountryDatabase(t *testing.T) {
+	// A Country database has no subdivisions at all, so accepting one
+	// would mean a permanent silent no-match.
+	m := MatchGeoIPSubdivision{DB: countryDB, Country: "US", Subdivisions: []string{"CA"}}
+	if err := m.Provision(caddy.Context{}); err == nil {
+		_ = m.Cleanup()
+		t.Error("expected provision to reject a Country database")
+	}
+}
+
+func TestSubdivisionProvisionRejects(t *testing.T) {
+	for _, bad := range []string{"", "USA", "U1", "U-"} {
+		m := MatchGeoIPSubdivision{DB: cityDB, Country: bad, Subdivisions: []string{"CA"}}
+		if err := m.Provision(caddy.Context{}); err == nil {
+			t.Errorf("expected provision to reject country %q", bad)
+		}
+	}
+	for _, bad := range []string{"", "CALI", "US-CA", "C A"} {
+		m := MatchGeoIPSubdivision{DB: cityDB, Country: "US", Subdivisions: []string{bad}}
+		if err := m.Provision(caddy.Context{}); err == nil {
+			t.Errorf("expected provision to reject subdivision %q", bad)
 		}
 	}
 }

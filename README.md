@@ -1,26 +1,26 @@
 # caddy-geoip
 
-Country and ASN request matchers for Caddy, using MaxMind GeoLite2/GeoIP2
+Country, subdivision, and ASN request matchers for Caddy, using MaxMind
+GeoLite2/GeoIP2
 
 ## Why
 
 I wanted to block a list of countries in Caddy and the popular plugin for this
 requires a double negative: the matcher means "this request passes the filter,"
-so to *block* a deny list you write `not` in front of it.
+so to *block* a deny list you write `not` in front of it. It works, but it
+always just irked me when looking at my Caddyfile.
 
-It works, but it always just irked me when looking at my Caddyfile.
-
-This plugin follows three rules:
+This plugin follows three general rules:
 
 1. **A matcher means one thing.** `geoip_country { country RU CN }` is true
    when the client *is in* Russia or China. That's it. A deny list is that
    matcher plus Caddy's `abort`. An allow list is `not` on the matcher.
 2. **Defer to Caddy.** Blocking, responding, redirecting, negating, combining
-   conditions, exempting the LAN, logging: Caddy already does all of these.
+   conditions, exempting the LAN, logging... Caddy already does all of these.
    Don't duplicate something Caddy already does well.
-3. **Current and small.** Built against Caddy v2.11.4 and maxminddb-golang
-   v2.6.0. No background goroutines, no shared state, and no dependencies
-   beyond those two. ~290 lines of code.
+3. **Fail early, or fail closed.** A bad configuration is rejected when Caddy
+   loads it, a failed lookup stops the request rather than letting it through.
+   Nothing is cached, shared between requests, or done in the background.
 
 Not related to `aablinov/caddy-geoip`.
 
@@ -41,6 +41,13 @@ Requires Go 1.25+ to build.
     match_unknown
 }
 
+@name geoip_subdivision {
+    db          <path>
+    country     <code>
+    subdivision <codes...>
+    match_unknown
+}
+
 @name geoip_asn {
     db  <path>
     asn <numbers...>
@@ -48,20 +55,30 @@ Requires Go 1.25+ to build.
 }
 ```
 
+`db` is required on every matcher, along with at least one country, subdivision
+or asn. `geoip_subdivision` also requires country, which scopes the codes.
+
 - **db** - path to a Country, City, or Enterprise database for `geoip_country`,
-  or an ASN, ISP, or Enterprise database for `geoip_asn`. The database type is
-  checked when the config loads, so pointing one matcher at the other's file is
-  an error rather than a silent no-match. Placeholders such as `{env.GEOIP_DB}`
+  a City or Enterprise database for `geoip_subdivision`, or an ASN, ISP, or
+  Enterprise database for `geoip_asn`. The database type is checked when the
+  config loads, so a file that lacks the field a matcher reads is rejected
+  rather than silently matching nothing. Placeholders such as `{env.GEOIP_DB}`
   are resolved.
-- **country** - ISO 3166-1 alpha-2 codes, case-insensitive.
+- **country** - ISO 3166-1 alpha-2 codes, case-insensitive. On
+  `geoip_subdivision` it is a single code, because subdivision codes are only
+  unique within a country.
+- **subdivision** - ISO 3166-2 codes without the country prefix (`CA`, not
+  `US-CA`), case-insensitive. Together with **country** they form the full
+  code: `country US` with `subdivision CA` is `US-CA`.
 - **asn** - autonomous system numbers as plain integers, no `AS` prefix.
 - **match_unknown** - also match IPs the database has no entry for (loopback,
-  private ranges, unallocated space). Off by default: an unknown IP is never
-  *in* a set. Under `not` that means it is always *outside* one; see the
-  allow-list example.
+  private ranges, unallocated space). On `geoip_subdivision` a record with a
+  country but no subdivision counts as unknown too. Off by default: an unknown
+  IP is never *in* a set. Under `not` that means it is always *outside* one
+  (see the allow-list example).
 
 Each matcher is true when the client **is in** the listed set. That is its
-only meaning; policy comes from what you attach to it.
+only meaning. Policy comes from what you attach to it.
 
 ## Examples
 
@@ -119,6 +136,18 @@ might want to add to your blocklist). The placeholder is set only after a
 matcher has run, so these go after the block. To log only blocked requests,
 replace the last line with Caddy's `log_skip`.
 
+Restrict a state - the country is required and scopes the subdivision codes,
+which are only unique within a country:
+
+```caddyfile
+@restricted geoip_subdivision {
+    db          "C:\Caddy\GeoLite2-City.mmdb"
+    country     US
+    subdivision UT LA MS
+}
+respond @restricted "Not available in your state" 451
+```
+
 Block hosting providers regardless of country:
 
 ```caddyfile
@@ -174,8 +203,10 @@ example.com {
 
 ## Placeholders
 
-`{geoip.country}` and `{geoip.asn}` hold the client's ISO code and AS number,
-or are empty if unknown. Each is set by the corresponding matcher when it runs.
+`{geoip.country}`, `{geoip.subdivision}` and `{geoip.asn}` hold the client's
+ISO codes and AS number, or are empty if unknown. Each is set by the
+corresponding matcher when it runs. `geoip_subdivision` sets both of the first
+two, since it reads both from one record.
 
 ## Notes
 
@@ -188,13 +219,20 @@ or are empty if unknown. Each is set by the corresponding matcher when it runs.
   your database updates run `caddy reload` afterward. Replace the file
   atomically (write to a temporary name, then rename) so a partially written
   file is never opened.
-- Each matcher does its own lookup when it runs, decoding only the one field it
+- Each matcher does its own lookup when it runs, decoding only the fields it
   needs from the record. There is no per-request caching.
-- `geoip_country` matches on MaxMind's located `country`, not
-  `registered_country`. An IP whose location MaxMind cannot determine is
-  unknown.
-- If the lookup fails, the matcher returns an error and Caddy fails the
-  request rather than letting it through.
+- The matchers use MaxMind's located `country`, not `registered_country`. An
+  IP whose location MaxMind cannot determine is unknown and treated as such.
+- `geoip_subdivision` matches the most specific subdivision MaxMind reports,
+  following their `most_specific_subdivision` convention. Where a country has
+  nested subdivisions - an address in Boxford reports `ENG` then `WBK` - only
+  the innermost (`WBK`) matches.
+- Territories with their own ISO 3166-1 code, such as Puerto Rico and Guam, are
+  reported under that code rather than as subdivisions of the parent country.
+- A City database carries country data too, so one file could serve all three
+  matchers. However, a country lookup on it touches more of the file than it
+  needs to (larger search tree). Point country matching at the Country database
+  unless you would rather maintain one file.
 
 ## JSON
 
@@ -204,20 +242,29 @@ or are empty if unknown. Each is set by the corresponding matcher when it runs.
     "db": "/usr/share/GeoIP/GeoLite2-Country.mmdb",
     "countries": ["US", "DE", "FR", "IT", "AR", "JP"]
   },
+  "geoip_subdivision": {
+    "db": "/usr/share/GeoIP/GeoLite2-City.mmdb",
+    "country": "US",
+    "subdivisions": ["CA", "NY"]
+  },
   "geoip_asn": {
     "db": "/usr/share/GeoIP/GeoLite2-ASN.mmdb",
     "asns": ["16509"]
   }
 }
 ```
+
 ## Out of scope
 
-City and subdivision matching, database auto-download, and rich placeholders
-(city name, coordinates, time zone) are deliberately not here.
+City-level matching, database auto-download, and rich placeholders (city name,
+coordinates, time zone) are deliberately not here.
 
 Database updates are either manually placed or `geoipupdate` plus `caddy reload`.
 
 ## Checks
+
+Built and tested against Caddy v2.11.4 and maxminddb-golang v2.6.0, with no
+other dependencies.
 
 The code passes:
 
@@ -226,9 +273,9 @@ The code passes:
 - `govulncheck ./...` with no reachable vulnerabilities
 - CodeQL via GitHub code scanning
 
-Tested against MaxMind's `GeoLite2-Country`, `GeoIP2-Country`, and
-`GeoLite2-ASN` test databases, and running in production with the free
-GeoLite2 editions.
+Tested against MaxMind's `GeoLite2-Country`, `GeoIP2-Country`, `GeoLite2-City`,
+`GeoIP2-City`, and `GeoLite2-ASN` test databases, and running in production
+with the free GeoLite2 editions.
 
 ## License
 

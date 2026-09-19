@@ -52,6 +52,26 @@ func lookup(r *http.Request, placeholder string, decode func(netip.Addr) (string
 	return value, nil
 }
 
+// lookupPlace returns the country code and the most specific
+// subdivision code for the client of r, decoded from one record by
+// decode, and exposes them as the {geoip.country} and
+// {geoip.subdivision} placeholders. An IP that cannot be resolved
+// yields two empty strings.
+func lookupPlace(r *http.Request, decode func(netip.Addr) (string, string, error)) (string, string, error) {
+	var country, subdivision string
+	if ip := clientIP(r); ip.IsValid() {
+		var err error
+		if country, subdivision, err = decode(ip); err != nil {
+			return "", "", err
+		}
+	}
+	if repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer); ok {
+		repl.Set("geoip.country", country)
+		repl.Set("geoip.subdivision", subdivision)
+	}
+	return country, subdivision, nil
+}
+
 // clientIP returns the client IP as resolved by the server (honoring
 // trusted_proxies), falling back to the connection's remote address.
 // An address that cannot be parsed, which only happens on Unix socket
