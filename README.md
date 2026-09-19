@@ -10,7 +10,7 @@ requires a double negative: the matcher means "this request passes the filter,"
 so to *block* a deny list you write `not` in front of it. It works, but it
 always just irked me when looking at my Caddyfile.
 
-This plugin follows three general rules:
+This plugin follows three rules:
 
 1. **A matcher means one thing.** It tests whether the IP is in the country,
    subdivision, or ASN list. That's it. You decide what happens to it...
@@ -77,9 +77,6 @@ or asn. `geoip_subdivision` also requires country, which scopes the codes.
   IP is never *in* a set. Under `not` that means it is always *outside* one
   (see the allow-list example).
 
-Each matcher is true when the client **is in** the listed set. That is its
-only meaning. Policy comes from what you attach to it.
-
 ## Examples
 
 Deny list - drop the connection for these countries:
@@ -92,9 +89,9 @@ Deny list - drop the connection for these countries:
 abort @blocked
 ```
 
-Allow list - only these countries may reach the login portal. `not` is the
-real negation here. An unknown IP is never *in* the set, so under `not` your
-own LAN would be blocked; exempt it with Caddy's `client_ip private_ranges`:
+Allow list - only these countries may reach the site. `not` is the real
+negation here. An unknown IP is never *in* the set, so under `not` your own LAN
+would be blocked; exempt it with Caddy's `client_ip private_ranges`:
 
 ```caddyfile
 @outside {
