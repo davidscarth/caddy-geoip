@@ -258,7 +258,7 @@ two, since it reads both from one record.
 City-level matching, database auto-download, and rich placeholders (city name,
 coordinates, time zone) are deliberately not here.
 
-Database updates are either manually placed or `geoipupdate` plus `caddy reload`.
+Database updates are either manually placed or [geoipupdate](https://github.com/maxmind/geoipupdate) plus `caddy reload`.
 
 ## Checks
 
