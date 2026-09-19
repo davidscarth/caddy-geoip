@@ -56,7 +56,7 @@ Requires Go 1.25+ to build.
 ```
 
 `db` is required on every matcher, along with at least one `country`,
-`subdivision` or `asn`. `geoip_subdivision` also requires `country`, which
+`subdivision`, or `asn`. `geoip_subdivision` also requires `country`, which
 scopes the codes. `match_unknown` is optional everywhere.
 
 - **db** - path to a Country, City, or Enterprise database for `geoip_country`,
@@ -258,7 +258,8 @@ two, since it reads both from one record.
 City-level matching, database auto-download, and rich placeholders (city name,
 coordinates, time zone) are deliberately not here.
 
-Database updates are either manually placed or [geoipupdate](https://github.com/maxmind/geoipupdate) plus `caddy reload`.
+Database updates are either manually placed or
+[`geoipupdate`](https://github.com/maxmind/geoipupdate) plus `caddy reload`.
 
 ## Checks
 
