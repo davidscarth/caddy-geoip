@@ -109,6 +109,9 @@ func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
 
 // asn returns the autonomous system number for ip as a decimal
 // string, or an empty string if the database has no entry for it.
+// MaxMind uses 0 for a record with no autonomous system, so a zero
+// here means absent rather than AS0, which is reserved and rejected
+// at provision time.
 func (m *MatchGeoIPASN) asn(ip netip.Addr) (string, error) {
 	var n uint32
 	if err := m.db.Lookup(ip).DecodePath(&n, "autonomous_system_number"); err != nil {

@@ -22,7 +22,7 @@ func openDB(path string, types ...string) (*maxminddb.Reader, error) {
 	path = caddy.NewReplacer().ReplaceAll(path, "")
 	db, err := maxminddb.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("opening db: %v", err)
+		return nil, fmt.Errorf("opening db: %w", err)
 	}
 	dbType := db.Metadata.DatabaseType
 	for _, t := range types {
