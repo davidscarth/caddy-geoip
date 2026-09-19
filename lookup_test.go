@@ -4,6 +4,8 @@ package caddygeoip
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -136,6 +138,39 @@ func TestCountryPlaceholder(t *testing.T) {
 	repl = r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if v, known := repl.Get("geoip.country"); !known || v != "" {
 		t.Errorf("unknown IP: expected known empty placeholder, got known=%v value=%q", known, v)
+	}
+}
+
+func TestEarlyDataRejected(t *testing.T) {
+	m := MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}}
+
+	if err := m.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	t.Cleanup(func() { _ = m.Cleanup() })
+
+	// An incomplete handshake means 0-RTT early data, where the client
+	// IP is not yet verified; the request must be refused with 425.
+	r := newRequest("81.2.69.142:1234")
+	r.TLS = &tls.ConnectionState{HandshakeComplete: false}
+
+	match, err := m.MatchWithError(r)
+	if match {
+		t.Error("expected no match on incomplete handshake")
+	}
+	var handlerErr caddyhttp.HandlerError
+	if !errors.As(err, &handlerErr) {
+		t.Fatalf("expected a caddyhttp.HandlerError, got %v", err)
+	}
+	if handlerErr.StatusCode != http.StatusTooEarly {
+		t.Errorf("expected status %d, got %d", http.StatusTooEarly, handlerErr.StatusCode)
+	}
+
+	// A completed handshake is matched as usual.
+	r = newRequest("81.2.69.142:1234")
+	r.TLS = &tls.ConnectionState{HandshakeComplete: true}
+	if match, err := m.MatchWithError(r); err != nil || !match {
+		t.Errorf("expected GB to match after handshake, got %v (%v)", match, err)
 	}
 }
 

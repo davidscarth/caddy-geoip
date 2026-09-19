@@ -86,6 +86,15 @@ func (m *MatchGeoIPCountry) Cleanup() error {
 // MatchWithError returns true if the client of r is in one of the
 // configured countries.
 func (m *MatchGeoIPCountry) MatchWithError(r *http.Request) (bool, error) {
+	// if handshake is not finished, we infer 0-RTT that has
+	// not verified remote IP; could be spoofed, so we throw
+	// HTTP 425 status to tell the client to try again after
+	// the handshake is complete
+	if r.TLS != nil && !r.TLS.HandshakeComplete {
+		return false, caddyhttp.Error(http.StatusTooEarly,
+			fmt.Errorf("TLS handshake not complete, client IP cannot be verified"))
+	}
+
 	code, err := lookup(r, "geoip.country", m.country)
 	if err != nil {
 		return false, err
