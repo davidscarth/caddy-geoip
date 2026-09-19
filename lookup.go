@@ -35,21 +35,21 @@ func openDB(path string, types ...string) (*maxminddb.Reader, error) {
 		path, dbType, strings.Join(types, " or "))
 }
 
-// lookup returns the value for the client of r, computed by fn, and
-// exposes it as the named placeholder. An IP that cannot be resolved
-// yields an empty string.
-func lookup(r *http.Request, placeholder string, fn func(netip.Addr) (string, error)) (string, error) {
-	var v string
+// lookup returns the value for the client of r, computed by decode,
+// and exposes it as the named placeholder. An IP that cannot be
+// resolved yields an empty string.
+func lookup(r *http.Request, placeholder string, decode func(netip.Addr) (string, error)) (string, error) {
+	var value string
 	if ip := clientIP(r); ip.IsValid() {
 		var err error
-		if v, err = fn(ip); err != nil {
+		if value, err = decode(ip); err != nil {
 			return "", err
 		}
 	}
 	if repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer); ok {
-		repl.Set(placeholder, v)
+		repl.Set(placeholder, value)
 	}
-	return v, nil
+	return value, nil
 }
 
 // clientIP returns the client IP as resolved by the server (honoring
