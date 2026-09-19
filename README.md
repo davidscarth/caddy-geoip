@@ -227,10 +227,11 @@ two, since it reads both from one record.
   the innermost (`WBK`) matches.
 - Territories with their own ISO 3166-1 code, such as Puerto Rico and Guam, are
   reported under that code rather than as subdivisions of the parent country.
-- A City database carries country data too, so one file could serve all three
-  matchers. However, a country lookup on it touches more of the file than it
-  needs to (larger search tree). Point country matching at the Country database
-  unless you would rather maintain one file.
+- Use the Country database for country matching: it's roughly a tenth the size
+  of City, so the lookup walks a much smaller search tree, and country matching
+  usually sits in front of all traffic. A City database carries country data
+  too, so one file could serve all three matchers if you'd rather maintain just
+  one file, but it's less efficient.
 
 ## JSON
 
