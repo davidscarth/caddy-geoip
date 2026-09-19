@@ -20,7 +20,6 @@ This plugin follows three general rules:
    Don't duplicate something Caddy already does well.
 3. **Fail early, or fail closed.** A bad configuration is rejected when Caddy
    loads it, a failed lookup stops the request rather than letting it through.
-   Nothing is cached, shared between requests, or done in the background.
 
 Not related to `aablinov/caddy-geoip`.
 
