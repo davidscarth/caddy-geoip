@@ -12,9 +12,10 @@ always just irked me when looking at my Caddyfile.
 
 This plugin follows three general rules:
 
-1. **A matcher means one thing.** `geoip_country { country RU CN }` is true
-   when the client *is in* Russia or China. That's it. A deny list is that
-   matcher plus Caddy's `abort`. An allow list is `not` on the matcher.
+1. **A matcher means one thing.** It tests whether the IP is in the country,
+   subdivision, or ASN list. That's it. You decide what happens to it...
+   `geoip_country { country RU CN }` plus Caddy's `abort` is a deny list, and
+   `not` on the matcher makes it an allow list.
 2. **Defer to Caddy.** Blocking, responding, redirecting, negating, combining
    conditions, exempting the LAN, logging... Caddy already does all of these.
    Don't duplicate something Caddy already does well.
@@ -202,7 +203,7 @@ example.com {
 
 ## Placeholders
 
-`{geoip.country}`, `{geoip.subdivision}` and `{geoip.asn}` hold the client's
+`{geoip.country}`, `{geoip.subdivision}`, and `{geoip.asn}` hold the client's
 ISO codes and AS number, or are empty if unknown. Each is set by the
 corresponding matcher when it runs. `geoip_subdivision` sets both of the first
 two, since it reads both from one record.
