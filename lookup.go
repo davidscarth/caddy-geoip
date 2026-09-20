@@ -84,10 +84,10 @@ func lookupPlace(r *http.Request, decode func(netip.Addr) (string, string, error
 }
 
 // setPlaceholder exposes value as the named placeholder. A value is
-// always recorded so that log_append has something to write, but an
-// empty one never replaces an answer already there: a matcher whose
-// database has no entry for the address did not match either, and
-// should not erase what another matcher resolved.
+// always recorded, but an empty one never replaces an answer already
+// there: a matcher whose database has no entry for the address did
+// not match either, and should not erase what another matcher
+// resolved.
 func setPlaceholder(r *http.Request, placeholder, value string) {
 	repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if !ok {

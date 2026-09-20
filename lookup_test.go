@@ -201,8 +201,7 @@ func TestCountryPlaceholder(t *testing.T) {
 		t.Errorf("placeholder: expected GB, got %q", got)
 	}
 
-	// An unknown IP must still set the placeholder, to an empty string,
-	// so that log_append records "" rather than the literal placeholder.
+	// An unknown IP must still set the placeholder, to an empty string.
 	r = newRequest("10.1.2.3:1234")
 	if _, err := m.MatchWithError(r); err != nil {
 		t.Fatal(err)
@@ -635,8 +634,7 @@ func TestSubdivisionPlaceholders(t *testing.T) {
 		t.Errorf("placeholders: expected GB-WBK, got %q", got)
 	}
 
-	// An unknown IP must still set both, to empty strings, so that
-	// log_append records "" rather than the literal placeholders.
+	// An unknown IP must still set both, to empty strings.
 	r = newRequest("10.1.2.3:1234")
 	if _, err := m.MatchWithError(r); err != nil {
 		t.Fatal(err)
