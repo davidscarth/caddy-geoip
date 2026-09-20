@@ -259,6 +259,128 @@ func TestEarlyDataRejected(t *testing.T) {
 	}
 }
 
+// TestClientIP pins the address forms clientIP has to cope with. The
+// client_ip var is a bare address; RemoteAddr always carries a port,
+// except on a unix socket listener where it is not an address at all.
+func TestClientIP(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		remoteAddr string
+		clientVar  string // "" means the var is not set
+		want       string // "" means an invalid Addr
+	}{
+		{"ipv4 with port", "1.2.3.4:5678", "", "1.2.3.4"},
+		{"ipv6 with port", "[2001:db8::1]:443", "", "2001:db8::1"},
+		{"ipv4-mapped ipv6 is unmapped", "[::ffff:1.2.3.4]:443", "", "1.2.3.4"},
+		{"ipv6 zone is stripped", "[fe80::1%eth0]:443", "", "fe80::1"},
+		{"bare ipv4 from client_ip var", "10.0.0.1:443", "1.2.3.4", "1.2.3.4"},
+		{"bare ipv6 from client_ip var", "10.0.0.1:443", "2001:db8::1", "2001:db8::1"},
+		{"bare ipv6 with zone from var", "10.0.0.1:443", "fe80::1%eth0", "fe80::1"},
+		{"ipv4-mapped ipv6 from var", "10.0.0.1:443", "::ffff:1.2.3.4", "1.2.3.4"},
+		{"bare ipv4 in RemoteAddr", "1.2.3.4", "", "1.2.3.4"},
+		{"bracketed ipv6 without a port", "[2001:db8::1]", "", ""},
+		{"unix socket", "@", "", ""},
+		{"empty", "", "", ""},
+		{"garbage", "not-an-address", "", ""},
+		{"port but no host", ":443", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRequest(tc.remoteAddr)
+			if tc.clientVar != "" {
+				caddyhttp.SetVar(r.Context(), caddyhttp.ClientIPVarKey, tc.clientVar)
+			}
+
+			got := clientIP(r)
+			var gotStr string
+			if got.IsValid() {
+				gotStr = got.String()
+			}
+			if gotStr != tc.want {
+				t.Errorf("clientIP() = %q, want %q", gotStr, tc.want)
+			}
+		})
+	}
+}
+
+// TestSetPlaceholder covers the write rule: a real answer is always
+// recorded, an empty one only when nothing is there yet.
+func TestSetPlaceholder(t *testing.T) {
+	const key = "geoip.country"
+
+	for _, tc := range []struct {
+		name      string
+		existing  string // "" with preset false means unset
+		preset    bool
+		write     string
+		want      string
+		wantKnown bool
+	}{
+		{name: "first answer is recorded", write: "US", want: "US", wantKnown: true},
+		{name: "unknown sets a known empty", write: "", want: "", wantKnown: true},
+		{
+			name: "an answer is not erased by a later blank",
+			existing: "US", preset: true, write: "", want: "US", wantKnown: true,
+		},
+		{
+			name: "a blank is replaced by a later answer",
+			preset: true, write: "GB", want: "GB", wantKnown: true,
+		},
+		{
+			name: "a later answer wins over an earlier one",
+			existing: "US", preset: true, write: "GB", want: "GB", wantKnown: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRequest("1.2.3.4:1234")
+			repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+			if tc.preset {
+				repl.Set(key, tc.existing)
+			}
+
+			setPlaceholder(r, key, tc.write)
+
+			got, known := repl.Get(key)
+			if known != tc.wantKnown {
+				t.Fatalf("known = %v, want %v", known, tc.wantKnown)
+			}
+			if got != tc.want {
+				t.Errorf("value = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestPlaceholderSurvivesLaterMatcher is the same rule seen through two
+// real matchers: 50.114.0.1 is in the Country database but not in the
+// City one, so the second matcher resolves nothing and must not erase
+// the first matcher's answer.
+func TestPlaceholderSurvivesLaterMatcher(t *testing.T) {
+	first := MatchGeoIPCountry{DB: countryDB, Countries: []string{"US"}}
+	if err := first.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision first: %v", err)
+	}
+	t.Cleanup(func() { _ = first.Cleanup() })
+
+	second := MatchGeoIPCountry{DB: cityDB, Countries: []string{"US"}}
+	if err := second.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision second: %v", err)
+	}
+	t.Cleanup(func() { _ = second.Cleanup() })
+
+	r := newRequest("50.114.0.1:1234")
+	if got, err := first.MatchWithError(r); err != nil || !got {
+		t.Fatalf("expected the Country database to match US, got %v (%v)", got, err)
+	}
+	if got, err := second.MatchWithError(r); err != nil || got {
+		t.Fatalf("expected the City database not to resolve this address, got %v (%v)", got, err)
+	}
+
+	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if got := repl.ReplaceAll("{geoip.country}", "MISSING"); got != "US" {
+		t.Errorf("expected US to survive the second matcher, got %q", got)
+	}
+}
+
 func TestClientIPHonorsTrustedProxyVar(t *testing.T) {
 	m := MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}}
 
@@ -428,6 +550,8 @@ func TestSubdivisionMatch(t *testing.T) {
 		// Boxford reports ENG then WBK; only the most specific matches.
 		{"most specific matches", "GB", []string{"WBK"}, "2.125.160.216:1234", true},
 		{"more general does not", "GB", []string{"ENG"}, "2.125.160.216:1234", false},
+		// A native IPv6 record that carries a subdivision.
+		{"native IPv6", "US", []string{"CA"}, "[2001:480::1]:1234", true},
 	}
 
 	for _, tc := range tests {

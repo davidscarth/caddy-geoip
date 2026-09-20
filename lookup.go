@@ -4,7 +4,6 @@ package caddygeoip
 
 import (
 	"fmt"
-	"net"
 	"net/http"
 	"net/netip"
 	"strings"
@@ -52,9 +51,7 @@ func lookup(r *http.Request, placeholder string, decode func(netip.Addr) (string
 			return "", err
 		}
 	}
-	if repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer); ok {
-		repl.Set(placeholder, value)
-	}
+	setPlaceholder(r, placeholder, value)
 	return value, nil
 }
 
@@ -71,11 +68,30 @@ func lookupPlace(r *http.Request, decode func(netip.Addr) (string, string, error
 			return "", "", err
 		}
 	}
-	if repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer); ok {
-		repl.Set("geoip.country", country)
-		repl.Set("geoip.subdivision", subdivision)
-	}
+	setPlaceholder(r, "geoip.country", country)
+	setPlaceholder(r, "geoip.subdivision", subdivision)
 	return country, subdivision, nil
+}
+
+// setPlaceholder exposes value as the named placeholder. A value is
+// always recorded so that log_append has something to write, but an
+// empty one never replaces an answer already there: a matcher whose
+// database has no entry for the address did not match either, and
+// should not erase what another matcher resolved.
+func setPlaceholder(r *http.Request, placeholder, value string) {
+	repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if !ok {
+		return
+	}
+	if value == "" {
+		// Get returns (nil, false) for a key that was never set, and a
+		// nil any is not equal to "", so the known check is what
+		// separates "nothing recorded yet" from "an answer is here".
+		if current, known := repl.Get(placeholder); known && current != "" {
+			return
+		}
+	}
+	repl.Set(placeholder, value)
 }
 
 // clientIP returns the client IP as resolved by the server (honoring
@@ -87,13 +103,14 @@ func clientIP(r *http.Request) netip.Addr {
 	if addr == "" {
 		addr = r.RemoteAddr
 	}
-	if host, _, err := net.SplitHostPort(addr); err == nil {
-		addr = host
+	// RemoteAddr carries a port; the client_ip var does not. A zone on
+	// a link-local address is not something the database indexes.
+	if ipp, err := netip.ParseAddrPort(addr); err == nil {
+		return ipp.Addr().WithZone("").Unmap()
 	}
-	addr, _, _ = strings.Cut(addr, "%")
 	ip, err := netip.ParseAddr(addr)
 	if err != nil {
 		return netip.Addr{}
 	}
-	return ip.Unmap()
+	return ip.WithZone("").Unmap()
 }

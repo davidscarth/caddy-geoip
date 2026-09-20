@@ -207,6 +207,9 @@ ISO codes and AS number, or are empty if unknown. Each is set by the
 corresponding matcher when it runs. `geoip_subdivision` sets both of the first
 two, since it reads both from one record.
 
+A matcher whose database has no entry for the address does not erase a value
+another matcher already recorded.
+
 ## Notes
 
 - The client IP is Caddy's `client_ip`: the connection's remote address, unless
