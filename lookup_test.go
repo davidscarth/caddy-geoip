@@ -29,6 +29,8 @@ const (
 	asnDB      = "testdata/GeoLite2-ASN-Test.mmdb"
 	cityDB     = "testdata/GeoLite2-City-Test.mmdb"
 	cityDB2    = "testdata/GeoIP2-City-Test.mmdb"
+	ispDB      = "testdata/GeoIP2-ISP-Test.mmdb"
+	entDB      = "testdata/GeoIP2-Enterprise-Test.mmdb"
 )
 
 // newRequest builds a request from the given remote address with the
@@ -97,6 +99,25 @@ func TestOpenDBTypeCheck(t *testing.T) {
 
 	if _, err := openDB("testdata/does-not-exist.mmdb", "country"); err == nil {
 		t.Error("expected error opening missing file")
+	}
+
+	// The paid editions each matcher accepts.
+	if db, err := openDB(entDB, "country", "city", "enterprise"); err != nil {
+		t.Errorf("expected an Enterprise db to be usable for country matching: %v", err)
+	} else {
+		_ = db.Close()
+	}
+	if db, err := openDB(entDB, "city", "enterprise"); err != nil {
+		t.Errorf("expected an Enterprise db to be usable for subdivision matching: %v", err)
+	} else {
+		_ = db.Close()
+	}
+	for _, f := range []string{ispDB, entDB} {
+		db, err := openDB(f, "asn", "isp", "enterprise")
+		if err != nil {
+			t.Fatalf("opening %s for ASN matching: %v", f, err)
+		}
+		_ = db.Close()
 	}
 
 	// An unset placeholder replaces to nothing; the error should say so
@@ -284,6 +305,65 @@ func TestASNMatch(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("Test %d: %s: expected %v, got %v", i, tc.remoteAddr, tc.want, got)
 		}
+	}
+}
+
+// TestASNAcrossDatabaseEditions checks the three editions the ASN
+// matcher accepts. Enterprise nests the autonomous system fields under
+// traits, so reading the top-level path there would match nothing at
+// all, silently.
+func TestASNAcrossDatabaseEditions(t *testing.T) {
+	for _, tc := range []struct {
+		name, db, addr string
+		asn            string
+	}{
+		{"GeoLite2-ASN", asnDB, "1.128.0.1:1234", "1221"},
+		{"GeoIP2-ISP", ispDB, "1.128.0.1:1234", "1221"},
+		{"GeoIP2-Enterprise", entDB, "74.209.24.1:1234", "14671"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := MatchGeoIPASN{DB: tc.db, ASNs: []string{tc.asn}}
+			if err := m.Provision(caddy.Context{}); err != nil {
+				t.Fatalf("provision: %v", err)
+			}
+			t.Cleanup(func() { _ = m.Cleanup() })
+
+			r := newRequest(tc.addr)
+			got, err := m.MatchWithError(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !got {
+				t.Errorf("expected AS%s to match", tc.asn)
+			}
+			repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+			if v := repl.ReplaceAll("{geoip.asn}", ""); v != tc.asn {
+				t.Errorf("placeholder: expected %s, got %q", tc.asn, v)
+			}
+		})
+	}
+}
+
+// TestEnterpriseCountryAndSubdivision checks that the other two
+// matchers read an Enterprise database, whose country and subdivision
+// fields sit at the top level as in City.
+func TestEnterpriseCountryAndSubdivision(t *testing.T) {
+	c := MatchGeoIPCountry{DB: entDB, Countries: []string{"GB"}}
+	if err := c.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision country: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Cleanup() })
+	if got, _ := c.MatchWithError(newRequest("2.125.160.216:1234")); !got {
+		t.Error("expected GB to match from an Enterprise database")
+	}
+
+	s := MatchGeoIPSubdivision{DB: entDB, Country: "GB", Subdivisions: []string{"WBK"}}
+	if err := s.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision subdivision: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Cleanup() })
+	if got, _ := s.MatchWithError(newRequest("2.125.160.216:1234")); !got {
+		t.Error("expected WBK to match from an Enterprise database")
 	}
 }
 

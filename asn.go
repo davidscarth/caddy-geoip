@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strconv"
+	"strings"
 
 	"github.com/oschwald/maxminddb-golang/v2"
 
@@ -34,8 +35,9 @@ type MatchGeoIPASN struct {
 	// ranges, unallocated space) matches. Default: false.
 	MatchUnknown bool `json:"match_unknown,omitempty"`
 
-	asns map[string]struct{}
-	db   *maxminddb.Reader
+	asns    map[string]struct{}
+	asnPath []any
+	db      *maxminddb.Reader
 }
 
 // CaddyModule returns the Caddy module information.
@@ -61,8 +63,18 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 		m.asns[strconv.FormatUint(n, 10)] = struct{}{}
 	}
 	var err error
-	m.db, err = openDB(m.DB, "asn", "isp", "enterprise")
-	return err
+	if m.db, err = openDB(m.DB, "asn", "isp", "enterprise"); err != nil {
+		return err
+	}
+
+	// An Enterprise database nests the autonomous system fields under
+	// traits; ASN and ISP databases carry them at the top level. The
+	// path is chosen once here rather than per request.
+	m.asnPath = []any{"autonomous_system_number"}
+	if strings.Contains(strings.ToLower(m.db.Metadata.DatabaseType), "enterprise") {
+		m.asnPath = []any{"traits", "autonomous_system_number"}
+	}
+	return nil
 }
 
 // Validate ensures the configuration is usable.
@@ -114,7 +126,7 @@ func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
 // at provision time.
 func (m *MatchGeoIPASN) asn(ip netip.Addr) (string, error) {
 	var n uint32
-	if err := m.db.Lookup(ip).DecodePath(&n, "autonomous_system_number"); err != nil {
+	if err := m.db.Lookup(ip).DecodePath(&n, m.asnPath...); err != nil {
 		return "", err
 	}
 	if n == 0 {
