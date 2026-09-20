@@ -88,14 +88,6 @@ func (m *MatchGeoIPASN) Validate() error {
 	return nil
 }
 
-// Cleanup closes the database.
-func (m *MatchGeoIPASN) Cleanup() error {
-	if m.db == nil {
-		return nil
-	}
-	return m.db.Close()
-}
-
 // MatchWithError returns true if the client of r is in one of the
 // configured autonomous systems.
 func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
@@ -180,7 +172,6 @@ func (m *MatchGeoIPASN) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 var (
 	_ caddy.Provisioner                 = (*MatchGeoIPASN)(nil)
 	_ caddy.Validator                   = (*MatchGeoIPASN)(nil)
-	_ caddy.CleanerUpper                = (*MatchGeoIPASN)(nil)
 	_ caddyhttp.RequestMatcherWithError = (*MatchGeoIPASN)(nil)
 	_ caddyfile.Unmarshaler             = (*MatchGeoIPASN)(nil)
 )

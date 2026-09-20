@@ -68,8 +68,18 @@ func lookupPlace(r *http.Request, decode func(netip.Addr) (string, string, error
 			return "", "", err
 		}
 	}
-	setPlaceholder(r, "geoip.country", country)
-	setPlaceholder(r, "geoip.subdivision", subdivision)
+	// Both come from one record, so they are published together or a
+	// country from one record ends up beside a subdivision from
+	// another. Two empty strings mean no record, so another matcher's
+	// answer stands; an empty subdivision beside a country is an
+	// answer, and overwrites.
+	if country == "" && subdivision == "" {
+		setPlaceholder(r, "geoip.country", "")
+		setPlaceholder(r, "geoip.subdivision", "")
+	} else {
+		overwritePlaceholder(r, "geoip.country", country)
+		overwritePlaceholder(r, "geoip.subdivision", subdivision)
+	}
 	return country, subdivision, nil
 }
 
@@ -92,6 +102,14 @@ func setPlaceholder(r *http.Request, placeholder, value string) {
 		}
 	}
 	repl.Set(placeholder, value)
+}
+
+// overwritePlaceholder exposes value as the named placeholder, empty
+// or not, for callers that know it is an answer rather than a gap.
+func overwritePlaceholder(r *http.Request, placeholder, value string) {
+	if repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer); ok {
+		repl.Set(placeholder, value)
+	}
 }
 
 // clientIP returns the client IP as resolved by the server (honoring

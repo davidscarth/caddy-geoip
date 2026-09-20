@@ -106,14 +106,6 @@ func (m *MatchGeoIPSubdivision) Validate() error {
 	return nil
 }
 
-// Cleanup closes the database.
-func (m *MatchGeoIPSubdivision) Cleanup() error {
-	if m.db == nil {
-		return nil
-	}
-	return m.db.Close()
-}
-
 // MatchWithError returns true if the client of r is in the configured
 // country and in one of the configured subdivisions.
 func (m *MatchGeoIPSubdivision) MatchWithError(r *http.Request) (bool, error) {
@@ -255,7 +247,6 @@ func (m *MatchGeoIPSubdivision) UnmarshalCaddyfile(d *caddyfile.Dispenser) error
 var (
 	_ caddy.Provisioner                 = (*MatchGeoIPSubdivision)(nil)
 	_ caddy.Validator                   = (*MatchGeoIPSubdivision)(nil)
-	_ caddy.CleanerUpper                = (*MatchGeoIPSubdivision)(nil)
 	_ caddyhttp.RequestMatcherWithError = (*MatchGeoIPSubdivision)(nil)
 	_ caddyfile.Unmarshaler             = (*MatchGeoIPSubdivision)(nil)
 )

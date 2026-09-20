@@ -116,9 +116,8 @@ respond @blocked "Not available in {geoip.country}" 451
 redir @outside https://example.com/blocked
 ```
 
-Log the country. Aborted requests already get an access-log line (status 0,
-with the client IP) but no country code. This `log_append` can be used to add
-that detail:
+Log the country. These assume access logging is on for the site (Caddy's `log`
+directive). `log_append` adds fields to that line rather than producing one.
 
 ```caddyfile
 handle @blocked {
@@ -126,14 +125,16 @@ handle @blocked {
     log_append geo_blocked true
     abort
 }
-log_append geo_country {geoip.country}
+handle {
+    log_append geo_country {geoip.country}
+}
 ```
 
 The lines inside `handle @blocked` tag denied requests with their country, the
-one after it tags everything that passed (useful for testing to see what you
-might want to add to your blocklist). The placeholder is set only after a
-matcher has run, so these go after the block. To log only blocked requests,
-replace the last line with Caddy's `log_skip`.
+second block tags everything that passed (useful for testing to see what you
+might want to add to your blocklist). Evaluating `@blocked` sets the
+placeholder whether or not it matches, so the second block still has a country
+to log.
 
 Restrict a state - the country is required and scopes the subdivision codes,
 which are only unique within a country:
@@ -208,7 +209,9 @@ corresponding matcher when it runs. `geoip_subdivision` sets both of the first
 two, since it reads both from one record.
 
 A matcher whose database has no entry for the address does not erase a value
-another matcher already recorded.
+another matcher already recorded. `geoip_subdivision` sets its two together, so
+a record with a country but no subdivision clears a subdivision another matcher
+recorded. The pair always describes one record.
 
 ## Notes
 
@@ -216,11 +219,11 @@ another matcher already recorded.
   that address is in the server's `trusted_proxies`, in which case Caddy takes
   the real client from `X-Forwarded-For`. With no trusted proxies configured, a
   forged `X-Forwarded-For` header has no effect.
-- The database is memory-mapped when the config loads and released when it is
-  unloaded, so `caddy reload` picks up a replaced file. Have whatever downloads
-  your database updates run `caddy reload` afterward. Replace the file
-  atomically (write to a temporary name, then rename) so a partially written
-  file is never opened.
+- The database is memory-mapped when the config loads, and the mapping is
+  released once nothing is reading it, so `caddy reload` picks up a replaced
+  file. Have whatever downloads your database updates run `caddy reload`
+  afterward. Replace the file atomically (write to a temporary name, then
+  rename) so a partially written file is never opened.
 - Each matcher does its own lookup when it runs, decoding only the fields it
   needs from the record. There is no per-request caching.
 - The matchers use MaxMind's located `country`, not `registered_country`. An

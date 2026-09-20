@@ -141,7 +141,6 @@ func TestCountryMatch(t *testing.T) {
 	if err := m.Validate(); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	t.Cleanup(func() { _ = m.Cleanup() })
 
 	for i, tc := range []struct {
 		remoteAddr string
@@ -174,7 +173,6 @@ func TestCountryMatchUnknown(t *testing.T) {
 	if err := m.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision: %v", err)
 	}
-	t.Cleanup(func() { _ = m.Cleanup() })
 
 	if got, _ := m.MatchWithError(newRequest("10.1.2.3:1234")); !got {
 		t.Error("expected unknown IP to match with match_unknown")
@@ -193,7 +191,6 @@ func TestCountryPlaceholder(t *testing.T) {
 	if err := m.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision: %v", err)
 	}
-	t.Cleanup(func() { _ = m.Cleanup() })
 
 	r := newRequest("81.2.69.142:1234")
 	if _, err := m.MatchWithError(r); err != nil {
@@ -230,7 +227,6 @@ func TestEarlyDataRejected(t *testing.T) {
 		if err := m.(caddy.Provisioner).Provision(caddy.Context{}); err != nil {
 			t.Fatalf("%s: provision: %v", name, err)
 		}
-		t.Cleanup(func() { _ = m.(caddy.CleanerUpper).Cleanup() })
 
 		// An incomplete handshake means 0-RTT early data, where the
 		// client IP is not yet verified; refuse the request with 425.
@@ -359,13 +355,11 @@ func TestPlaceholderSurvivesLaterMatcher(t *testing.T) {
 	if err := first.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision first: %v", err)
 	}
-	t.Cleanup(func() { _ = first.Cleanup() })
 
 	second := MatchGeoIPCountry{DB: cityDB, Countries: []string{"US"}}
 	if err := second.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision second: %v", err)
 	}
-	t.Cleanup(func() { _ = second.Cleanup() })
 
 	r := newRequest("50.114.0.1:1234")
 	if got, err := first.MatchWithError(r); err != nil || !got {
@@ -387,7 +381,6 @@ func TestClientIPHonorsTrustedProxyVar(t *testing.T) {
 	if err := m.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision: %v", err)
 	}
-	t.Cleanup(func() { _ = m.Cleanup() })
 
 	// The server sets client_ip when trusted_proxies resolved a forwarded
 	// address; the matcher must prefer it over RemoteAddr.
@@ -408,7 +401,6 @@ func TestASNMatch(t *testing.T) {
 	if err := m.Validate(); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	t.Cleanup(func() { _ = m.Cleanup() })
 
 	for i, tc := range []struct {
 		remoteAddr string
@@ -448,7 +440,6 @@ func TestASNAcrossDatabaseEditions(t *testing.T) {
 			if err := m.Provision(caddy.Context{}); err != nil {
 				t.Fatalf("provision: %v", err)
 			}
-			t.Cleanup(func() { _ = m.Cleanup() })
 
 			r := newRequest(tc.addr)
 			got, err := m.MatchWithError(r)
@@ -474,7 +465,6 @@ func TestEnterpriseCountryAndSubdivision(t *testing.T) {
 	if err := c.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision country: %v", err)
 	}
-	t.Cleanup(func() { _ = c.Cleanup() })
 	if got, _ := c.MatchWithError(newRequest("2.125.160.216:1234")); !got {
 		t.Error("expected GB to match from an Enterprise database")
 	}
@@ -483,7 +473,6 @@ func TestEnterpriseCountryAndSubdivision(t *testing.T) {
 	if err := s.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision subdivision: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Cleanup() })
 	if got, _ := s.MatchWithError(newRequest("2.125.160.216:1234")); !got {
 		t.Error("expected WBK to match from an Enterprise database")
 	}
@@ -496,7 +485,6 @@ func TestASNMatchUnknownAndPlaceholder(t *testing.T) {
 	if err := m.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision: %v", err)
 	}
-	t.Cleanup(func() { _ = m.Cleanup() })
 
 	if got, _ := m.MatchWithError(newRequest("10.1.2.3:1234")); !got {
 		t.Error("expected an IP with no ASN record to match with match_unknown")
@@ -567,7 +555,6 @@ func TestSubdivisionMatch(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
 		}
-		_ = m.Cleanup()
 	}
 }
 
@@ -603,7 +590,6 @@ func TestSubdivisionMatchUnknown(t *testing.T) {
 			if got != matchUnknown {
 				t.Errorf("%s (match_unknown=%v): got %v", tc.name, matchUnknown, got)
 			}
-			_ = m.Cleanup()
 		}
 	}
 }
@@ -620,7 +606,6 @@ func TestSubdivisionCountryMismatchIsNotUnknown(t *testing.T) {
 	if err := m.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision: %v", err)
 	}
-	t.Cleanup(func() { _ = m.Cleanup() })
 
 	r := newRequest("216.160.83.56:1234")
 	if got, _ := m.MatchWithError(r); got {
@@ -640,7 +625,6 @@ func TestSubdivisionPlaceholders(t *testing.T) {
 	if err := m.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision: %v", err)
 	}
-	t.Cleanup(func() { _ = m.Cleanup() })
 
 	r := newRequest("2.125.160.216:1234")
 	if _, err := m.MatchWithError(r); err != nil {
@@ -670,7 +654,6 @@ func TestSubdivisionRejectsCountryDatabase(t *testing.T) {
 	// would mean a permanent silent no-match.
 	m := MatchGeoIPSubdivision{DB: countryDB, Country: "US", Subdivisions: []string{"CA"}}
 	if err := m.Provision(caddy.Context{}); err == nil {
-		_ = m.Cleanup()
 		t.Error("expected provision to reject a Country database")
 	}
 }
@@ -728,7 +711,6 @@ func TestSubdivisionMissingFieldsDeferToValidate(t *testing.T) {
 		if err := tc.m.Provision(caddy.Context{}); err != nil {
 			t.Errorf("%s: expected Provision to defer, got %v", tc.name, err)
 		}
-		t.Cleanup(func() { _ = tc.m.Cleanup() })
 
 		err := tc.m.Validate()
 		if err == nil {
@@ -737,5 +719,67 @@ func TestSubdivisionMissingFieldsDeferToValidate(t *testing.T) {
 		if !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: expected an error mentioning %q, got %v", tc.name, tc.want, err)
 		}
+	}
+}
+
+// TestSubdivisionPlaceholdersMoveTogether pins that the two placeholders
+// are published from one record. 2001:480::1 is US/CA in GeoLite2-City
+// and JP with no subdivision in GeoIP2-Enterprise, so a matcher reading
+// the second must not leave the first matcher's CA beside its JP: no
+// record anywhere says JP-CA.
+func TestSubdivisionPlaceholdersMoveTogether(t *testing.T) {
+	const addr = "[2001:480::1]:1234"
+
+	first := MatchGeoIPSubdivision{DB: cityDB, Country: "US", Subdivisions: []string{"CA"}}
+	if err := first.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision first: %v", err)
+	}
+
+	second := MatchGeoIPSubdivision{DB: entDB, Country: "JP", Subdivisions: []string{"13"}}
+	if err := second.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision second: %v", err)
+	}
+
+	r := newRequest(addr)
+	if got, err := first.MatchWithError(r); err != nil || !got {
+		t.Fatalf("expected the City database to match US-CA, got %v (%v)", got, err)
+	}
+	// The Enterprise record has a country but no subdivision, so this
+	// matcher does not match; the placeholders must still describe it.
+	if got, err := second.MatchWithError(r); err != nil || got {
+		t.Fatalf("expected no match on a record without subdivisions, got %v (%v)", got, err)
+	}
+
+	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != "JP-" {
+		t.Errorf("placeholders: expected JP- from one record, got %q", got)
+	}
+}
+
+// TestPlaceholderSurvivesAbsentRecord is the other half of the rule: a
+// matcher whose database has no entry learned nothing and must not erase
+// what another matcher resolved. 50.114.0.1 is in the Country database
+// but absent from the City one.
+func TestPlaceholderSurvivesAbsentRecord(t *testing.T) {
+	first := MatchGeoIPSubdivision{DB: cityDB, Country: "US", Subdivisions: []string{"WA"}}
+	if err := first.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision first: %v", err)
+	}
+
+	r := newRequest("216.160.83.56:1234") // US-WA in the City database
+	if got, err := first.MatchWithError(r); err != nil || !got {
+		t.Fatalf("expected US-WA to match, got %v (%v)", got, err)
+	}
+
+	// Same request, an address the City database cannot place.
+	r2 := newRequest("50.114.0.1:1234")
+	*r2 = *r2.WithContext(r.Context()) // share the replacer
+	if got, err := first.MatchWithError(r2); err != nil || got {
+		t.Fatalf("expected no match for an absent record, got %v (%v)", got, err)
+	}
+
+	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != "US-WA" {
+		t.Errorf("expected US-WA to survive an absent record, got %q", got)
 	}
 }
