@@ -30,7 +30,7 @@ Not related to `aablinov/caddy-geoip`.
 xcaddy build --with github.com/davidscarth/caddy-geoip
 ```
 
-Requires Go 1.25+ to build.
+Requires Go 1.25.1 or later to build.
 
 ## Syntax
 
