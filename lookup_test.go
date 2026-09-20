@@ -41,6 +41,25 @@ func newRequest(remoteAddr string) *http.Request {
 	return r.WithContext(ctx)
 }
 
+// TestModuleIDs pins the strings users type into a Caddyfile. Nothing
+// else checks them: a typo here compiles, passes every other test, and
+// only surfaces as an unrecognized directive in someone's config.
+func TestModuleIDs(t *testing.T) {
+	for want, m := range map[string]caddy.Module{
+		"http.matchers.geoip_country":     MatchGeoIPCountry{},
+		"http.matchers.geoip_subdivision": MatchGeoIPSubdivision{},
+		"http.matchers.geoip_asn":         MatchGeoIPASN{},
+	} {
+		info := m.CaddyModule()
+		if got := string(info.ID); got != want {
+			t.Errorf("expected module ID %q, got %q", want, got)
+		}
+		if info.New == nil {
+			t.Errorf("%s: New is nil", want)
+		}
+	}
+}
+
 func TestOpenDBTypeCheck(t *testing.T) {
 	for _, f := range []string{countryDB, countryDB2} {
 		db, err := openDB(f, "country", "city", "enterprise")
