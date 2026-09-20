@@ -231,11 +231,10 @@ another matcher already recorded.
   the innermost (`WBK`) matches.
 - Territories with their own ISO 3166-1 code, such as Puerto Rico and Guam, are
   reported under that code rather than as subdivisions of the parent country.
-- Use the Country database for country matching: it's roughly a tenth the size
-  of City, so the lookup walks a much smaller search tree (more efficient). If
-  you prefer to maintain only one file, the City database carries country data
-  as well, at some cost in speed. `geoip_asn` always needs its own database
-  unless you have Enterprise.
+- Use the Country database for country matching (it's roughly an eighth the
+size of City). One City database could serve both `geoip_country` and
+`geoip_subdivision` if you'd rather keep one file. `geoip_asn` always needs
+its own database unless you have Enterprise.
 
 ## JSON
 
