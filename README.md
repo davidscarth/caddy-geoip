@@ -275,8 +275,8 @@ The code passes:
 - CodeQL via GitHub code scanning
 
 Tested against MaxMind's `GeoLite2-Country`, `GeoIP2-Country`, `GeoLite2-City`,
-`GeoIP2-City`, `GeoLite2-ASN`, `GeoIP2-ISP-Test`, and `GeoIP2-Enterprise-Test`
-test databases, and running in production with the free GeoLite2 editions.
+`GeoIP2-City`, `GeoLite2-ASN`, `GeoIP2-ISP`, and `GeoIP2-Enterprise` test
+databases, and running in production with the free GeoLite2 editions.
 
 ## License
 
