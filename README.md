@@ -229,10 +229,9 @@ two, since it reads both from one record.
 - Territories with their own ISO 3166-1 code, such as Puerto Rico and Guam, are
   reported under that code rather than as subdivisions of the parent country.
 - Use the Country database for country matching: it's roughly a tenth the size
-  of City, so the lookup walks a much smaller search tree, and country matching
-  usually sits in front of all traffic. A City database carries country data
-  too, so one file could serve all three matchers if you'd rather maintain just
-  one file, but it's less efficient.
+  of City, so the lookup walks a much smaller search tree (more efficient). If
+  you prefer to maintain only one file, the City database carries country data
+  as well, at some cost in speed. `geoip_asn` always needs its own database.
 
 ## JSON
 
