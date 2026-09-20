@@ -208,10 +208,9 @@ ISO codes and AS number, or are empty if unknown. Each is set by the
 corresponding matcher when it runs. `geoip_subdivision` sets both of the first
 two, since it reads both from one record.
 
-A matcher whose database has no entry for the address does not erase a value
-another matcher already recorded. `geoip_subdivision` sets its two together, so
-a record with a country but no subdivision clears a subdivision another matcher
-recorded. The pair always describes one record.
+A matcher that finds nothing writes nothing. A matcher that finds a record
+writes the whole record. When two matchers write the same placeholder, the last
+one to run wins.
 
 ## Notes
 
