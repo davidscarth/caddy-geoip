@@ -231,7 +231,8 @@ two, since it reads both from one record.
 - Use the Country database for country matching: it's roughly a tenth the size
   of City, so the lookup walks a much smaller search tree (more efficient). If
   you prefer to maintain only one file, the City database carries country data
-  as well, at some cost in speed. `geoip_asn` always needs its own database.
+  as well, at some cost in speed. `geoip_asn` always needs its own database
+  unless you have Enterprise.
 
 ## JSON
 
