@@ -302,8 +302,8 @@ A smoke test was performed with [DB-IP](https://db-ip.com/)'s Lite databases
 `geoip_country` and `geoip_asn` as drop-in replacements for GeoLite2, no code
 changes needed. **However** City Lite **does not work** for `geoip_subdivision`,
 as the free version does not appear to include ISO 3166-2 codes. DB-IP
-compatibility is not guaranteed and depends on the vendor shipping compliant
-databases.
+compatibility is not regularly tested and depends on the vendor shipping
+compliant databases.
 
 ## License
 
