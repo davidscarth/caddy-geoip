@@ -81,7 +81,9 @@ scopes the codes. `match_unknown` is optional everywhere.
 
 ## Examples
 
-Deny list - drop the connection for these countries:
+#### Deny list
+
+Drop the connection for these countries:
 
 ```caddyfile
 @blocked geoip_country {
@@ -91,7 +93,9 @@ Deny list - drop the connection for these countries:
 abort @blocked
 ```
 
-Allow list - only these countries may reach the site. `not` is the real
+#### Allow list
+
+Only these countries may reach the site. `not` is the real
 negation here. An unknown IP is never *in* the set, so under `not` your own LAN
 would be blocked; exempt it with Caddy's `client_ip private_ranges`:
 
@@ -109,14 +113,18 @@ abort @outside
 (`match_unknown` on the matcher is the blunter alternative: it lets every
 unknown IP through, not just the LAN.)
 
-Friendlier responses, using Caddy's own handlers:
+#### Friendlier responses
+
+Using Caddy's own handlers:
 
 ```caddyfile
 respond @blocked "Not available in {geoip.country}" 451
 redir @outside https://example.com/blocked
 ```
 
-Log the country. These assume access logging is on for the site (Caddy's `log`
+#### Log the country
+
+These assume access logging is on for the site (Caddy's `log`
 directive). `log_append` adds fields to that line rather than producing one.
 
 ```caddyfile
@@ -136,7 +144,9 @@ might want to add to your blocklist). Evaluating `@blocked` sets the
 placeholder whether or not it matches, so the second block still has a country
 to log.
 
-Restrict a state - the country is required and scopes the subdivision codes,
+#### Restrict a state
+
+The country is required and scopes the subdivision codes,
 which are only unique within a country:
 
 ```caddyfile
@@ -148,7 +158,9 @@ which are only unique within a country:
 respond @restricted "Not available in your state" 451
 ```
 
-Block hosting providers regardless of country:
+#### Block hosting providers
+
+Regardless of country:
 
 ```caddyfile
 @hosting geoip_asn {
@@ -158,7 +170,9 @@ Block hosting providers regardless of country:
 abort @hosting
 ```
 
-Combine - matchers inside one named matcher are ANDed, so "Russia, except
+#### Combine
+
+Matchers inside one named matcher are ANDed, so "Russia, except
 this network" is a single condition rather than two rules that need ordering:
 
 ```caddyfile
@@ -173,7 +187,7 @@ Two separate `abort` lines are both denies and combine as OR in any order.
 An exception must be written inside one matcher, as above, because nothing
 can un-abort a request.
 
-Route by region:
+#### Route by region
 
 ```caddyfile
 @eu geoip_country {
@@ -184,7 +198,7 @@ reverse_proxy @eu eu-backend:8080
 reverse_proxy backend:8080
 ```
 
-Reusable snippet:
+#### Reusable snippet
 
 ```caddyfile
 (geoblock) {
@@ -234,9 +248,9 @@ one to run wins.
 - Territories with their own ISO 3166-1 code, such as Puerto Rico and Guam, are
   reported under that code rather than as subdivisions of the parent country.
 - Use the Country database for country matching (it's roughly an eighth the
-size of City). One City database could serve both `geoip_country` and
-`geoip_subdivision` if you'd rather keep one file. `geoip_asn` always needs
-its own database unless you have Enterprise.
+  size of City). One City database could serve both `geoip_country` and
+  `geoip_subdivision` if you'd rather keep one file. `geoip_asn` always needs
+  its own database unless you have Enterprise.
 
 ## JSON
 
