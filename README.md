@@ -292,9 +292,17 @@ The code passes:
 - `govulncheck ./...` with no reachable vulnerabilities
 - CodeQL via GitHub code scanning
 
-Tested against MaxMind's `GeoLite2-Country`, `GeoIP2-Country`, `GeoLite2-City`,
-`GeoIP2-City`, `GeoLite2-ASN`, `GeoIP2-ISP`, and `GeoIP2-Enterprise` test
-databases, and running in production with the free GeoLite2 editions.
+Tested against [MaxMind](https://www.maxmind.com/)'s `GeoLite2-Country`,
+`GeoIP2-Country`, `GeoLite2-City`, `GeoIP2-City`, `GeoLite2-ASN`, `GeoIP2-ISP`,
+and `GeoIP2-Enterprise` test databases, and running in production with the free
+GeoLite2 editions.
+
+A smoke test was performed with [DB-IP](https://db-ip.com/)'s Lite databases
+(September 2026). The Country Lite and ASN Lite MMDB files appear to work with
+`geoip_country` and `geoip_asn` as drop-in replacements for GeoLite2, no code
+changes needed. **However** City Lite **does not work** for `geoip_subdivision`,
+as the free version does not appear to include ISO 3166-2 codes. DB-IP
+compatibility is not guaranteed and may vary or change between releases.
 
 ## License
 
