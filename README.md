@@ -297,13 +297,13 @@ Tested against [MaxMind](https://www.maxmind.com/)'s `GeoLite2-Country`,
 and `GeoIP2-Enterprise` test databases, and running in production with the free
 GeoLite2 editions.
 
-A smoke test was performed with [DB-IP](https://db-ip.com/)'s Lite databases
-(September 2026). The Country Lite and ASN Lite MMDB files appear to work with
-`geoip_country` and `geoip_asn` as drop-in replacements for GeoLite2, no code
-changes needed. **However** City Lite **does not work** for `geoip_subdivision`,
-as the free version does not appear to include ISO 3166-2 codes. DB-IP
-compatibility is not regularly tested and depends on the vendor shipping
-compliant databases.
+DB-IP compatibility is not supported and depends on the vendor shipping
+compliant databases. A smoke test was performed with
+[DB-IP](https://db-ip.com/)'s Lite databases (September 2026). The Country Lite
+and ASN Lite MMDB files appear to work with `geoip_country` and `geoip_asn` as
+drop-in replacements for GeoLite2, no code changes needed. **However** City Lite
+**does not work** for `geoip_subdivision`, as the free version does not appear
+to include ISO 3166-2 codes.
 
 ## License
 
