@@ -276,7 +276,7 @@ one to run wins.
   },
   "geoip_asn": {
     "db": "/usr/share/GeoIP/GeoLite2-ASN.mmdb",
-    "asns": ["16509"]
+    "asns": [16509]
   }
 }
 ```

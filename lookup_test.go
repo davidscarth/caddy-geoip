@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -38,8 +39,21 @@ const (
 )
 
 // newRequest builds a request from the given remote address with the
-// context a Caddy server would provide: a vars table and a replacer.
+// context a Caddy server would provide: a vars table, a replacer, and
+// the client_ip var set the way PrepareRequest sets it, to the host of
+// RemoteAddr with port and zone stripped. That is the path production
+// requests take through clientIP, so the suite exercises it by default.
 func newRequest(remoteAddr string) *http.Request {
+	r := newRawRequest(remoteAddr)
+	if ipp, err := netip.ParseAddrPort(remoteAddr); err == nil {
+		caddyhttp.SetVar(r.Context(), caddyhttp.ClientIPVarKey, ipp.Addr().WithZone("").String())
+	}
+	return r
+}
+
+// newRawRequest is newRequest without the client_ip var, for tests that
+// target the RemoteAddr fallback in clientIP.
+func newRawRequest(remoteAddr string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.RemoteAddr = remoteAddr
 	ctx := context.WithValue(r.Context(), caddyhttp.VarsCtxKey, map[string]any{})
@@ -174,6 +188,52 @@ func TestIPv4OnlyLookupErrors(t *testing.T) {
 	}
 }
 
+// TestLookupErrorFailsClosed pins that a lookup error reaches the caller
+// as an error rather than being swallowed into "no match". Closing the
+// reader is the one way to make Lookup fail without a corrupt fixture:
+// v2 returns a Result carrying an error, which DecodePath propagates.
+func TestLookupErrorFailsClosed(t *testing.T) {
+	country := &MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}}
+	asn := &MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}}
+	subdivision := &MatchGeoIPSubdivision{DB: cityDB, Country: "US", Subdivisions: []string{"WA"}}
+
+	for name, tc := range map[string]struct {
+		provision func() error
+		closeDB   func() error
+		match     func(*http.Request) (bool, error)
+	}{
+		"country": {
+			func() error { return country.Provision(caddy.Context{}) },
+			func() error { return country.db.Close() },
+			country.MatchWithError,
+		},
+		"asn": {
+			func() error { return asn.Provision(caddy.Context{}) },
+			func() error { return asn.db.Close() },
+			asn.MatchWithError,
+		},
+		"subdivision": {
+			func() error { return subdivision.Provision(caddy.Context{}) },
+			func() error { return subdivision.db.Close() },
+			subdivision.MatchWithError,
+		},
+	} {
+		if err := tc.provision(); err != nil {
+			t.Fatalf("%s: provision: %v", name, err)
+		}
+		if err := tc.closeDB(); err != nil {
+			t.Fatalf("%s: close: %v", name, err)
+		}
+		got, err := tc.match(newRequest("81.2.69.142:1234"))
+		if err == nil {
+			t.Errorf("%s: expected an error from a closed database", name)
+		}
+		if got {
+			t.Errorf("%s: expected no match on error", name)
+		}
+	}
+}
+
 // TestUnprovisionedFailsClosed pins that a matcher driven without a
 // successful Provision returns an error rather than dereferencing a
 // nil reader. Caddy never reaches this state; tests and embedders can.
@@ -246,6 +306,11 @@ func TestCountryMatchUnknown(t *testing.T) {
 	if got, _ := m.MatchWithError(newRequest("216.160.83.56:1234")); got {
 		t.Error("expected US not to match GB even with match_unknown")
 	}
+	// A client whose address cannot be parsed at all (a Unix socket
+	// listener) is unknown in the same sense as an absent record.
+	if got, _ := m.MatchWithError(newRawRequest("@")); !got {
+		t.Error("expected unparseable client to match with match_unknown")
+	}
 }
 
 func TestCountryPlaceholder(t *testing.T) {
@@ -279,7 +344,7 @@ func TestEarlyDataRejected(t *testing.T) {
 	// The guard is copied into each matcher, so each copy is checked.
 	matchers := map[string]caddyhttp.RequestMatcherWithError{
 		"country": &MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}},
-		"asn":     &MatchGeoIPASN{DB: asnDB, ASNs: []string{"1221"}},
+		"asn":     &MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}},
 		"subdivision": &MatchGeoIPSubdivision{
 			DB: cityDB, Country: "GB", Subdivisions: []string{"ENG"},
 		},
@@ -356,7 +421,7 @@ func TestClientIP(t *testing.T) {
 		{"port but no host", ":443", "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			r := newRequest(tc.remoteAddr)
+			r := newRawRequest(tc.remoteAddr)
 			if tc.clientVar != "" {
 				caddyhttp.SetVar(r.Context(), caddyhttp.ClientIPVarKey, tc.clientVar)
 			}
@@ -467,7 +532,7 @@ func TestClientIPHonorsTrustedProxyVar(t *testing.T) {
 }
 
 func TestASNMatch(t *testing.T) {
-	m := MatchGeoIPASN{DB: asnDB, ASNs: []string{"001221"}} // leading zeros normalized
+	m := MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}}
 
 	// Caddy provisions before it validates.
 	if err := m.Provision(caddy.Context{}); err != nil {
@@ -504,14 +569,14 @@ func TestASNMatch(t *testing.T) {
 func TestASNAcrossDatabaseEditions(t *testing.T) {
 	for _, tc := range []struct {
 		name, db, addr string
-		asn            string
+		asn            uint32
 	}{
-		{"GeoLite2-ASN", asnDB, "1.128.0.1:1234", "1221"},
-		{"GeoIP2-ISP", ispDB, "1.128.0.1:1234", "1221"},
-		{"GeoIP2-Enterprise", entDB, "74.209.24.1:1234", "14671"},
+		{"GeoLite2-ASN", asnDB, "1.128.0.1:1234", 1221},
+		{"GeoIP2-ISP", ispDB, "1.128.0.1:1234", 1221},
+		{"GeoIP2-Enterprise", entDB, "74.209.24.1:1234", 14671},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			m := MatchGeoIPASN{DB: tc.db, ASNs: []string{tc.asn}}
+			m := MatchGeoIPASN{DB: tc.db, ASNs: []uint32{tc.asn}}
 			if err := m.Provision(caddy.Context{}); err != nil {
 				t.Fatalf("provision: %v", err)
 			}
@@ -522,11 +587,12 @@ func TestASNAcrossDatabaseEditions(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !got {
-				t.Errorf("expected AS%s to match", tc.asn)
+				t.Errorf("expected AS%d to match", tc.asn)
 			}
+			want := strconv.FormatUint(uint64(tc.asn), 10)
 			repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
-			if v := repl.ReplaceAll("{geoip.asn}", ""); v != tc.asn {
-				t.Errorf("placeholder: expected %s, got %q", tc.asn, v)
+			if v := repl.ReplaceAll("{geoip.asn}", ""); v != want {
+				t.Errorf("placeholder: expected %s, got %q", want, v)
 			}
 		})
 	}
@@ -556,7 +622,7 @@ func TestEnterpriseCountryAndSubdivision(t *testing.T) {
 func TestASNMatchUnknownAndPlaceholder(t *testing.T) {
 	// match_unknown and the placeholder name are separate lines in
 	// asn.go from the country matcher's, so they are checked here too.
-	m := MatchGeoIPASN{DB: asnDB, ASNs: []string{"1221"}, MatchUnknown: true}
+	m := MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}, MatchUnknown: true}
 	if err := m.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("provision: %v", err)
 	}
@@ -575,12 +641,13 @@ func TestASNMatchUnknownAndPlaceholder(t *testing.T) {
 	}
 }
 
+// TestASNProvisionRejects covers the one value the type can hold but the
+// domain cannot. Everything else is rejected at Caddyfile parse time or
+// by the JSON decoder, which does not accept strings or negatives.
 func TestASNProvisionRejects(t *testing.T) {
-	for _, bad := range []string{"0", "AS1221", "-1", "abc", "4294967296"} {
-		m := MatchGeoIPASN{DB: asnDB, ASNs: []string{bad}}
-		if err := m.Provision(caddy.Context{}); err == nil {
-			t.Errorf("expected provision to reject asn %q", bad)
-		}
+	m := MatchGeoIPASN{DB: asnDB, ASNs: []uint32{0}}
+	if err := m.Provision(caddy.Context{}); err == nil {
+		t.Error("expected provision to reject asn 0")
 	}
 }
 
@@ -845,9 +912,12 @@ func TestPlaceholderSurvivesAbsentRecord(t *testing.T) {
 		t.Fatalf("expected US-WA to match, got %v (%v)", got, err)
 	}
 
-	// Same request, an address the City database cannot place.
+	// Same request, an address the City database cannot place. Sharing
+	// the context shares the vars table too, so client_ip is set again
+	// for the new address, as a server would for a new request.
 	r2 := newRequest("50.114.0.1:1234")
 	*r2 = *r2.WithContext(r.Context()) // share the replacer
+	caddyhttp.SetVar(r2.Context(), caddyhttp.ClientIPVarKey, "50.114.0.1")
 	if got, err := first.MatchWithError(r2); err != nil || got {
 		t.Fatalf("expected no match for an absent record, got %v (%v)", got, err)
 	}

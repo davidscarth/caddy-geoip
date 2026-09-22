@@ -50,6 +50,43 @@ func TestASNUnmarshalCaddyfile(t *testing.T) {
 			}`,
 			wantErr: true,
 		},
+		// Digits only, in uint32 range. Leading zeros are accepted by
+		// ParseUint and simply have no representation in the type.
+		{
+			input: `geoip_asn {
+				db /tmp/ASN.mmdb
+				asn 001221
+			}`,
+			wantASNs: 1,
+		},
+		{
+			input: `geoip_asn {
+				db /tmp/ASN.mmdb
+				asn AS16509
+			}`,
+			wantErr: true,
+		},
+		{
+			input: `geoip_asn {
+				db /tmp/ASN.mmdb
+				asn -1
+			}`,
+			wantErr: true,
+		},
+		{
+			input: `geoip_asn {
+				db /tmp/ASN.mmdb
+				asn abc
+			}`,
+			wantErr: true,
+		},
+		{
+			input: `geoip_asn {
+				db /tmp/ASN.mmdb
+				asn 4294967296
+			}`,
+			wantErr: true,
+		},
 	} {
 		var m MatchGeoIPASN
 		err := m.UnmarshalCaddyfile(caddyfile.NewTestDispenser(tc.input))
@@ -77,8 +114,8 @@ func TestASNValidate(t *testing.T) {
 		m       MatchGeoIPASN
 		wantErr bool
 	}{
-		{m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb", ASNs: []string{"16509"}}},
-		{m: MatchGeoIPASN{ASNs: []string{"16509"}}, wantErr: true},
+		{m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb", ASNs: []uint32{16509}}},
+		{m: MatchGeoIPASN{ASNs: []uint32{16509}}, wantErr: true},
 		{m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb"}, wantErr: true},
 	} {
 		err := tc.m.Validate()

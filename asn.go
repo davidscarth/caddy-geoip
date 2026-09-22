@@ -28,8 +28,8 @@ type MatchGeoIPASN struct {
 	// Path to an ASN, ISP, or Enterprise database. Supports placeholders.
 	DB string `json:"db,omitempty"`
 
-	// Autonomous system numbers to match, as plain integers.
-	ASNs []string `json:"asns,omitempty"`
+	// Autonomous system numbers to match.
+	ASNs []uint32 `json:"asns,omitempty"`
 
 	// Whether an IP the database has no entry for (loopback, private
 	// ranges, unallocated space) matches. Default: false.
@@ -54,13 +54,15 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 	if m.DB == "" {
 		return nil
 	}
+	// The set is keyed by the decimal form so the request path can
+	// compare the placeholder string it publishes anyway. ASN 0 is
+	// reserved and never appears in a database.
 	m.asns = make(map[string]struct{}, len(m.ASNs))
-	for _, a := range m.ASNs {
-		n, err := strconv.ParseUint(a, 10, 32)
-		if err != nil || n == 0 {
-			return fmt.Errorf("invalid asn %q", a)
+	for _, n := range m.ASNs {
+		if n == 0 {
+			return fmt.Errorf("invalid asn 0")
 		}
-		m.asns[strconv.FormatUint(n, 10)] = struct{}{}
+		m.asns[strconv.FormatUint(uint64(n), 10)] = struct{}{}
 	}
 	var err error
 	if m.db, err = openDB(m.DB, "asn", "isp", "enterprise"); err != nil {
@@ -159,7 +161,13 @@ func (m *MatchGeoIPASN) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				if len(args) == 0 {
 					return d.ArgErr()
 				}
-				m.ASNs = append(m.ASNs, args...)
+				for _, a := range args {
+					n, err := strconv.ParseUint(a, 10, 32)
+					if err != nil {
+						return d.Errf("invalid asn %q", a)
+					}
+					m.ASNs = append(m.ASNs, uint32(n))
+				}
 			case "match_unknown":
 				if d.NextArg() {
 					return d.ArgErr()
