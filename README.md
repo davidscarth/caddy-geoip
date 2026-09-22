@@ -93,8 +93,8 @@ Drop the connection for these countries:
 abort @blocked
 ```
 
-An IP the database cannot place is not in any listed country, so it passes.
-That includes your LAN and unallocated space. Add `match_unknown` to deny
+An address the database has no record for is not in any listed country, so it
+passes. That covers your LAN and unallocated space. Add `match_unknown` to deny
 those too.
 
 #### Allow list
