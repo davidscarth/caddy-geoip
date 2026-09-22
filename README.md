@@ -1,7 +1,7 @@
 # caddy-geoip
 
-Country, subdivision, and ASN request matchers for Caddy, using MaxMind
-GeoLite2/GeoIP2
+Country, subdivision, and ASN request matchers for [Caddy](https://caddyserver.com/),
+using [MaxMind](https://www.maxmind.com/) GeoLite2/GeoIP2
 
 ## Why
 
@@ -26,7 +26,7 @@ Not related to `aablinov/caddy-geoip`.
 
 ## Install
 
-```
+```shell
 xcaddy build --with github.com/davidscarth/caddy-geoip
 ```
 
@@ -292,10 +292,9 @@ The code passes:
 - `govulncheck ./...` with no reachable vulnerabilities
 - CodeQL via GitHub code scanning
 
-Tested against [MaxMind](https://www.maxmind.com/)'s `GeoLite2-Country`,
-`GeoIP2-Country`, `GeoLite2-City`, `GeoIP2-City`, `GeoLite2-ASN`, `GeoIP2-ISP`,
-and `GeoIP2-Enterprise` test databases, and running in production with the free
-GeoLite2 editions.
+Tested against MaxMind's `GeoLite2-Country`, `GeoIP2-Country`, `GeoLite2-City`,
+`GeoIP2-City`, `GeoLite2-ASN`, `GeoIP2-ISP`, and `GeoIP2-Enterprise` test
+databases, and running in production with the free GeoLite2 editions.
 
 DB-IP compatibility is **not supported** and depends on the vendor shipping
 compliant databases. A smoke test was performed with DB-IP's Lite databases
