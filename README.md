@@ -148,6 +148,11 @@ might want to add to your blocklist). Evaluating `@blocked` sets the
 placeholder whether or not it matches, so the second block still has a country
 to log.
 
+For an audit trail prefer `respond 403` over `abort` in the blocked route; an
+aborted request logs without a normal response. Anything that reads the JSON
+access log (Loki, Vector, Elastic) can turn `geo_country` into a per-country
+rate, which is where a sudden shift after a database update shows up.
+
 #### Restrict a state
 
 The country is required and scopes the subdivision codes,
