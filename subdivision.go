@@ -123,7 +123,7 @@ func (m *MatchGeoIPSubdivision) MatchWithError(r *http.Request) (bool, error) {
 		return false, fmt.Errorf("geoip_subdivision: not provisioned")
 	}
 
-	country, subdivision, err := lookupPlace(r, m.place)
+	country, subdivision, err := lookupPlace(r, m.placeOf)
 	if err != nil {
 		return false, err
 	}
@@ -142,12 +142,12 @@ func (m *MatchGeoIPSubdivision) MatchWithError(r *http.Request) (bool, error) {
 	return ok, nil
 }
 
-// place returns the country code and the most specific subdivision
+// placeOf returns the country code and the most specific subdivision
 // code for ip, both decoded from one record. Either is empty if the
 // database has no entry for it. Both are decoded whatever the country
 // turns out to be, so the placeholders report what the database knows
 // even for a request this matcher does not match.
-func (m *MatchGeoIPSubdivision) place(ip netip.Addr) (string, string, error) {
+func (m *MatchGeoIPSubdivision) placeOf(ip netip.Addr) (string, string, error) {
 	result := m.db.Lookup(ip)
 
 	var country string

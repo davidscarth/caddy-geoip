@@ -51,11 +51,8 @@ func openDB(path string, types ...string) (*maxminddb.Reader, error) {
 		return nil, fmt.Errorf("db %s is a %s database, expected %s",
 			path, dbType, strings.Join(types, " or "))
 	}
-	// The reader reports an IPv6 lookup in an IPv4-only tree as an
-	// error rather than as no record, which would turn every IPv6
-	// request into a 5xx with nothing in the config to explain it.
-	// Every MaxMind edition is IPv6 (a tree that may also hold IPv4),
-	// so refuse the other kind here, where the message can name it.
+	// The reader errors on IPv6 lookups in an IPv4-only tree instead of
+	// reporting no record, so every IPv6 request would 5xx. Refuse it here.
 	if v := db.Metadata.IPVersion; v != 6 {
 		_ = db.Close()
 		return nil, fmt.Errorf("db %s is an IPv4-only database (ip_version %d), which is not supported",
@@ -153,11 +150,8 @@ func overwritePlaceholder(r *http.Request, placeholder, value string) {
 // An address that cannot be parsed, which only happens on Unix socket
 // listeners, yields an invalid Addr and is treated as unknown.
 //
-// The two sources have different shapes, so each gets the parser for
-// its shape rather than trying both on every request: the client_ip
-// var is a bare address, since the server strips the port and zone
-// whether or not a trusted proxy was involved, and RemoteAddr is
-// host:port on every TCP and QUIC listener.
+// client_ip is always a bare address and RemoteAddr always host:port,
+// so each gets its own parser rather than trying both per request.
 func clientIP(r *http.Request) netip.Addr {
 	var ip netip.Addr
 	if addr, _ := caddyhttp.GetVar(r.Context(), caddyhttp.ClientIPVarKey).(string); addr != "" {
@@ -166,7 +160,7 @@ func clientIP(r *http.Request) netip.Addr {
 			// client_ip is a bare IP as Caddy sets it; a host:port
 			// form only appears if a vars handler overwrote it, so
 			// try that shape only after the plain parse fails.
-			if ipp, err := netip.ParseAddrPort(addr); err == nil {
+			if ipp, perr := netip.ParseAddrPort(addr); perr == nil {
 				ip = ipp.Addr()
 			}
 		}

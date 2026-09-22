@@ -92,7 +92,7 @@ func (m *MatchGeoIPCountry) MatchWithError(r *http.Request) (bool, error) {
 		return false, fmt.Errorf("geoip_country: not provisioned")
 	}
 
-	code, err := lookup(r, "geoip.country", m.country)
+	code, err := lookup(r, "geoip.country", m.countryOf)
 	if err != nil {
 		return false, err
 	}
@@ -103,9 +103,9 @@ func (m *MatchGeoIPCountry) MatchWithError(r *http.Request) (bool, error) {
 	return ok, nil
 }
 
-// country returns the ISO country code for ip, or an empty string if
+// countryOf returns the ISO country code for ip, or an empty string if
 // the database has no entry for it.
-func (m *MatchGeoIPCountry) country(ip netip.Addr) (string, error) {
+func (m *MatchGeoIPCountry) countryOf(ip netip.Addr) (string, error) {
 	var code string
 	err := m.db.Lookup(ip).DecodePath(&code, countryPath...)
 	return code, err

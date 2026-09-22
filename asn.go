@@ -105,7 +105,7 @@ func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
 		return false, fmt.Errorf("geoip_asn: not provisioned")
 	}
 
-	asn, err := lookup(r, "geoip.asn", m.asn)
+	asn, err := lookup(r, "geoip.asn", m.asnOf)
 	if err != nil {
 		return false, err
 	}
@@ -116,12 +116,12 @@ func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
 	return ok, nil
 }
 
-// asn returns the autonomous system number for ip as a decimal
+// asnOf returns the autonomous system number for ip as a decimal
 // string, or an empty string if the database has no entry for it.
 // MaxMind uses 0 for a record with no autonomous system, so a zero
 // here means absent rather than AS0, which is reserved and rejected
 // at provision time.
-func (m *MatchGeoIPASN) asn(ip netip.Addr) (string, error) {
+func (m *MatchGeoIPASN) asnOf(ip netip.Addr) (string, error) {
 	var n uint32
 	if err := m.db.Lookup(ip).DecodePath(&n, m.asnPath...); err != nil {
 		return "", err
