@@ -148,10 +148,11 @@ might want to add to your blocklist). Evaluating `@blocked` sets the
 placeholder whether or not it matches, so the second block still has a country
 to log.
 
-For an audit trail prefer `respond 403` over `abort` in the blocked route; an
-aborted request logs without a normal response. Anything that reads the JSON
-access log (Loki, Vector, Elastic) can turn `geo_country` into a per-country
-rate, which is where a sudden shift after a database update shows up.
+If you need an audit trail, use `respond 403` instead of `abort` in the blocked
+route. An aborted request is logged without a normal response. Any tool that
+reads the JSON access log, such as Loki, Vector, or Elastic, can chart
+`geo_country` as a rate per country. Database updates sometimes move whole IP
+blocks between countries, which logging and monitoring can expose.
 
 #### Restrict a state
 
