@@ -242,6 +242,11 @@ one to run wins.
   that address is in the server's `trusted_proxies`, in which case Caddy takes
   the real client from `X-Forwarded-For`. With no trusted proxies configured, a
   forged `X-Forwarded-For` header has no effect.
+- If you set `trusted_proxies`, also set `trusted_proxies_strict` (or
+  `client_ip_headers` naming a single-value header your proxy sets, such as
+  `CF-Connecting-IP`). Without it Caddy takes the left-most `X-Forwarded-For`
+  entry, which a client can forge if your proxy appends to the header rather
+  than replacing it.
 - The database is memory-mapped when the config loads. After `caddy reload`
   the new config opens the file fresh, so a replaced file is picked up. The
   old mapping is released by the garbage collector once the old config has
