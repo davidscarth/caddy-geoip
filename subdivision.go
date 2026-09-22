@@ -118,6 +118,11 @@ func (m *MatchGeoIPSubdivision) MatchWithError(r *http.Request) (bool, error) {
 			fmt.Errorf("TLS handshake not complete, client IP cannot be verified"))
 	}
 
+	// Guard for callers outside Caddy; fails closed instead of nil-dereferencing.
+	if m.db == nil {
+		return false, fmt.Errorf("geoip_subdivision: not provisioned")
+	}
+
 	country, subdivision, err := lookupPlace(r, m.place)
 	if err != nil {
 		return false, err
@@ -146,24 +151,19 @@ func (m *MatchGeoIPSubdivision) place(ip netip.Addr) (string, string, error) {
 	result := m.db.Lookup(ip)
 
 	var country string
-	if err := result.DecodePath(&country, "country", "iso_code"); err != nil {
+	if err := result.DecodePath(&country, countryPath...); err != nil {
 		return "", "", err
 	}
 
-	var subdivisions []struct {
-		ISOCode string `maxminddb:"iso_code"`
-	}
-	if err := result.DecodePath(&subdivisions, "subdivisions"); err != nil {
+	// Only the most specific subdivision is read (see subdivisionPath).
+	// If it carries no code the client is unknown at this level rather
+	// than a member of a more general subdivision they did not
+	// configure.
+	var subdivision string
+	if err := result.DecodePath(&subdivision, subdivisionPath...); err != nil {
 		return "", "", err
 	}
-	// MaxMind orders subdivisions from most general to most specific,
-	// so the last entry is the one to match on. If it carries no code
-	// the client is unknown at this level rather than a member of a
-	// more general subdivision they did not configure.
-	if n := len(subdivisions); n > 0 {
-		return country, subdivisions[n-1].ISOCode, nil
-	}
-	return country, "", nil
+	return country, subdivision, nil
 }
 
 // isSubdivisionCode reports whether s has the shape of the second part

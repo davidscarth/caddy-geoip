@@ -100,6 +100,11 @@ func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
 			fmt.Errorf("TLS handshake not complete, client IP cannot be verified"))
 	}
 
+	// Guard for callers outside Caddy; fails closed instead of nil-dereferencing.
+	if m.db == nil {
+		return false, fmt.Errorf("geoip_asn: not provisioned")
+	}
+
 	asn, err := lookup(r, "geoip.asn", m.asn)
 	if err != nil {
 		return false, err

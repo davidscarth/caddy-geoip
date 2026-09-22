@@ -87,6 +87,11 @@ func (m *MatchGeoIPCountry) MatchWithError(r *http.Request) (bool, error) {
 			fmt.Errorf("TLS handshake not complete, client IP cannot be verified"))
 	}
 
+	// Guard for callers outside Caddy; fails closed instead of nil-dereferencing.
+	if m.db == nil {
+		return false, fmt.Errorf("geoip_country: not provisioned")
+	}
+
 	code, err := lookup(r, "geoip.country", m.country)
 	if err != nil {
 		return false, err
@@ -102,7 +107,7 @@ func (m *MatchGeoIPCountry) MatchWithError(r *http.Request) (bool, error) {
 // the database has no entry for it.
 func (m *MatchGeoIPCountry) country(ip netip.Addr) (string, error) {
 	var code string
-	err := m.db.Lookup(ip).DecodePath(&code, "country", "iso_code")
+	err := m.db.Lookup(ip).DecodePath(&code, countryPath...)
 	return code, err
 }
 

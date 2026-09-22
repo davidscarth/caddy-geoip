@@ -8,8 +8,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
+
+	"github.com/oschwald/maxminddb-golang/v2"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
@@ -31,6 +34,7 @@ const (
 	cityDB2    = "testdata/GeoIP2-City-Test.mmdb"
 	ispDB      = "testdata/GeoIP2-ISP-Test.mmdb"
 	entDB      = "testdata/GeoIP2-Enterprise-Test.mmdb"
+	ipv4DB     = "testdata/MaxMind-DB-test-ipv4-24.mmdb" // ip_version 4 db test
 )
 
 // newRequest builds a request from the given remote address with the
@@ -128,6 +132,65 @@ func TestOpenDBTypeCheck(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "placeholder") {
 		t.Errorf("expected the error to mention placeholder replacement, got %v", err)
+	}
+}
+
+// TestOpenDBRejectsIPv4Only pins that an ip_version 4 database is a
+// config error. The reader errors on an IPv6 lookup in such a tree
+// instead of reporting no record, so accepting one would turn every
+// IPv6 request into a 5xx. The fixture's type is "Test", so the type
+// check is satisfied deliberately to reach the version check.
+func TestOpenDBRejectsIPv4Only(t *testing.T) {
+	_, err := openDB(ipv4DB, "test")
+	if err == nil {
+		t.Fatal("expected error opening an IPv4-only database")
+	}
+	if !strings.Contains(err.Error(), "ip_version 4") {
+		t.Errorf("expected the error to name ip_version 4, got %v", err)
+	}
+
+	// A type mismatch is the more common mistake and is reported
+	// first, so the version check must not mask it.
+	_, err = openDB(ipv4DB, "country")
+	if err == nil {
+		t.Fatal("expected type error opening a Test database as a country db")
+	}
+	if strings.Contains(err.Error(), "ip_version") {
+		t.Errorf("expected the type error to win over the version error, got %v", err)
+	}
+}
+
+// TestIPv4OnlyLookupErrors pins the library behavior openDB's version
+// check exists for: an IPv6 lookup in an ip_version 4 tree is an error,
+// not a missing record. If this fails, the guard has become optional.
+func TestIPv4OnlyLookupErrors(t *testing.T) {
+	db, err := maxminddb.Open(ipv4DB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if db.Lookup(netip.MustParseAddr("2001:db8::1")).Err() == nil {
+		t.Error("expected an IPv6 lookup in an IPv4-only database to error")
+	}
+}
+
+// TestUnprovisionedFailsClosed pins that a matcher driven without a
+// successful Provision returns an error rather than dereferencing a
+// nil reader. Caddy never reaches this state; tests and embedders can.
+func TestUnprovisionedFailsClosed(t *testing.T) {
+	r := newRequest("81.2.69.142:1234")
+	for name, m := range map[string]caddyhttp.RequestMatcherWithError{
+		"country":     &MatchGeoIPCountry{},
+		"asn":         &MatchGeoIPASN{},
+		"subdivision": &MatchGeoIPSubdivision{},
+	} {
+		got, err := m.MatchWithError(r)
+		if err == nil {
+			t.Errorf("%s: expected an error from an unprovisioned matcher", name)
+		}
+		if got {
+			t.Errorf("%s: expected no match from an unprovisioned matcher", name)
+		}
 	}
 }
 
@@ -257,6 +320,10 @@ func TestEarlyDataRejected(t *testing.T) {
 // TestClientIP pins the address forms clientIP has to cope with. The
 // client_ip var is a bare address; RemoteAddr always carries a port,
 // except on a unix socket listener where it is not an address at all.
+//
+// The var can also carry host:port if a vars handler overwrote it, so
+// that form is parsed too, but only after the bare form fails; the
+// rows below exist so the retry cannot be removed as redundant.
 func TestClientIP(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -272,6 +339,15 @@ func TestClientIP(t *testing.T) {
 		{"bare ipv6 from client_ip var", "10.0.0.1:443", "2001:db8::1", "2001:db8::1"},
 		{"bare ipv6 with zone from var", "10.0.0.1:443", "fe80::1%eth0", "fe80::1"},
 		{"ipv4-mapped ipv6 from var", "10.0.0.1:443", "::ffff:1.2.3.4", "1.2.3.4"},
+		{"ipv4 with port from var", "10.0.0.1:443", "1.2.3.4:5678", "1.2.3.4"},
+		{"ipv6 with port from var", "10.0.0.1:443", "[2001:db8::1]:443", "2001:db8::1"},
+		{"bracketed ipv6 without a port from var", "10.0.0.1:443", "[2001:db8::1]", ""},
+		{"garbage from var", "10.0.0.1:443", "not-an-address", ""},
+		// An unbracketed IPv6 with a trailing port is itself a valid
+		// IPv6 address, so it parses as one. No parser can tell the
+		// two readings apart; this pins that it is looked up as the
+		// address rather than treated as unknown.
+		{"unbracketed ipv6 with trailing port from var", "10.0.0.1:443", "2001:db8::1:443", "2001:db8::1:443"},
 		{"bare ipv4 in RemoteAddr", "1.2.3.4", "", "1.2.3.4"},
 		{"bracketed ipv6 without a port", "[2001:db8::1]", "", ""},
 		{"unix socket", "@", "", ""},

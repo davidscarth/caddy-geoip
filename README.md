@@ -93,6 +93,10 @@ Drop the connection for these countries:
 abort @blocked
 ```
 
+An IP the database cannot place is not in any listed country, so it passes.
+That includes your LAN and unallocated space. Add `match_unknown` to deny
+those too.
+
 #### Allow list
 
 Only these countries may reach the site. `not` is the real
@@ -232,11 +236,16 @@ one to run wins.
   that address is in the server's `trusted_proxies`, in which case Caddy takes
   the real client from `X-Forwarded-For`. With no trusted proxies configured, a
   forged `X-Forwarded-For` header has no effect.
-- The database is memory-mapped when the config loads, and the mapping is
-  released once nothing is reading it, so `caddy reload` picks up a replaced
-  file. Have whatever downloads your database updates run `caddy reload`
-  afterward. Replace the file atomically (write to a temporary name, then
-  rename) so a partially written file is never opened.
+- The database is memory-mapped when the config loads. After `caddy reload`
+  the new config opens the file fresh, so a replaced file is picked up. The
+  old mapping is released by the garbage collector once the old config has
+  finished draining. Have whatever downloads your database updates run
+  `caddy reload` afterward.
+- **Never overwrite the database file in place while Caddy is running.** The
+  server reads it through a shared memory mapping, so writing into it can
+  crash Caddy or corrupt lookups. Either stop Caddy first, or write the new
+  file under a temporary name and rename it over the old one, which is what
+  `geoipupdate` does by default.
 - Each matcher does its own lookup when it runs, decoding only the fields it
   needs from the record. There is no per-request caching.
 - The matchers use MaxMind's located `country`, not `registered_country`. An
