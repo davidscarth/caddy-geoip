@@ -88,7 +88,7 @@ Drop the connection for these countries:
 ```caddyfile
 @blocked geoip_country {
     db      "C:\Caddy\GeoLite2-Country.mmdb"
-    country CU IR KP RU BY VE MM NI SD
+    country CN RU PK KP IR ID IN VN BR NG BY CU SY VE SD
 }
 abort @blocked
 ```
@@ -107,7 +107,7 @@ would be blocked; exempt it with Caddy's `client_ip private_ranges`:
 @outside {
     not geoip_country {
         db      "C:\Caddy\GeoLite2-Country.mmdb"
-        country US DE FR IT AR JP
+        country US CA GB FR DE IT ES AR AU JP
     }
     not client_ip private_ranges
 }
@@ -119,10 +119,11 @@ unknown IP through, not just the LAN.)
 
 #### Friendlier responses
 
-Using Caddy's own handlers:
+Using Caddy's own handlers (pick one):
 
 ```caddyfile
-respond @blocked "Not available in {geoip.country}" 451
+respond @blocked "Not available in {geoip.country}" 403
+respond @blocked "Access from {geoip.country} is restricted due to legal/regulatory requirements." 451
 redir @outside https://example.com/blocked
 ```
 
