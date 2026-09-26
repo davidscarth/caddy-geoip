@@ -317,7 +317,7 @@ Tested against MaxMind's `GeoLite2-Country`, `GeoIP2-Country`, `GeoLite2-City`,
 `GeoIP2-City`, `GeoLite2-ASN`, `GeoIP2-ISP`, and `GeoIP2-Enterprise` test
 databases, and running in production with the free GeoLite2 editions.
 
-DB-IP compatibility is **not supported** and depends on the vendor shipping
+DB-IP compatibility is not supported and depends on the vendor shipping
 compliant databases. A smoke test was performed with DB-IP's Lite databases
 (September 2026). The Country Lite and ASN Lite MMDB files appear to work with
 `geoip_country` and `geoip_asn` as drop-in replacements for GeoLite2, no code
