@@ -215,7 +215,7 @@ reverse_proxy backend:8080
 (geoblock) {
     @blocked geoip_country {
         db      "C:\Caddy\GeoLite2-Country.mmdb"
-        country CU IR KP RU BY VE MM NI SD
+        country CN RU PK KP IR ID IN VN BR NG BY CU SY VE SD
     }
     abort @blocked
 }
