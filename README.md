@@ -5,10 +5,10 @@ using [MaxMind](https://www.maxmind.com/) GeoLite2/GeoIP2
 
 ## Why
 
-I wanted to block a list of countries in Caddy and the popular plugin for this
-requires a double negative: the matcher means "this request passes the filter,"
-so to *block* a deny list you write `not` in front of it. It works, but it
-always just irked me when looking at my Caddyfile.
+I wanted to block a list of countries in Caddy but the popular plugin for this
+requires a double negative. Its matcher means "this request passes the filter,"
+so to *block* a deny list you have to write `not` in front of it. It works, but
+it always just irked me when looking at my Caddyfile.
 
 This plugin follows three rules:
 
