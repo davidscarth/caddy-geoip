@@ -10,7 +10,7 @@ requires a double negative. Its matcher means "this request passes the filter,"
 so to *block* a deny list you have to write `not` in front of it. It works, but
 it always just irked me when looking at my Caddyfile.
 
-This plugin follows three rules:
+This plugin follows the following rules:
 
 1. **A matcher means one thing.** It tests whether the IP is in the country,
    subdivision, or ASN list. That's it. You decide what happens to it...
@@ -20,7 +20,16 @@ This plugin follows three rules:
    conditions, exempting the LAN, logging... Caddy already does all of these.
    Don't duplicate something Caddy already does well.
 3. **Fail early, or fail closed.** A bad configuration is rejected when Caddy
-   loads it, a failed lookup stops the request rather than letting it through.
+   loads, a failed lookup stops the request rather than letting it through.
+4. **Standard identifiers only.** Countries are ISO 3166-1, subdivisions are
+   ISO 3166-2, ASNs are IANA numbers.
+
+Two limits to rule #3:
+- Unlocated addresses: an address the database can't place is unknown. Use
+   `match_unknown` if that matters to you.
+- Unmatched codes: a code the database never uses matches nothing. `country
+   UK` loads fine but won't work, because the database spells it `GB` (standard
+   ISO 3166-1 code).
 
 Not related to `aablinov/caddy-geoip`.
 
