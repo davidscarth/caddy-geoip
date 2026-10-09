@@ -26,10 +26,10 @@ This plugin follows the following rules:
 
 Two limits to rule #3:
 - Unlocated addresses: an address the database can't place is unknown. Use
-   `match_unknown` if that matters to you.
-- Unmatched codes: a code the database never uses matches nothing. `country
-   UK` loads fine but won't work, because the database spells it `GB` (standard
-   ISO 3166-1 code).
+   `match_unknown` cautiously if that matters to you.
+- Unmatched codes: a code the database doesn't use matches nothing. `country
+   UK` will load fine but won't work, because the database spells it `GB` (the
+   standard ISO 3166-1 code).
 
 Not related to `aablinov/caddy-geoip`.
 
