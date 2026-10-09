@@ -12,7 +12,7 @@ it always just irked me when looking at my Caddyfile.
 
 This plugin follows the following rules:
 
-1. **A matcher means one thing.** It tests whether the IP is in the country,
+1. **The matcher just matches.** It tests whether the IP is in the country,
    subdivision, or ASN list. That's it. You decide what happens to it...
    `geoip_country { country RU CN }` plus Caddy's `abort` is a deny list, and
    `not` on the matcher makes it an allow list.
