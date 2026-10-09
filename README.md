@@ -79,7 +79,7 @@ scopes the codes. `match_unknown` is optional everywhere.
   unique within a country.
 - **subdivision** - ISO 3166-2 codes without the country prefix (`CA`, not
   `US-CA`), case-insensitive. Together with **country** they represent the full
-  code: `country US` with `subdivision CA` is the same as `US-CA`.
+  code: `country US` with `subdivision CA` is how `US-CA` is written.
 - **asn** - autonomous system numbers as plain integers, no `AS` prefix.
 - **match_unknown** - use with caution. Matches IPs the database has no entry
   for (loopback, private ranges, unallocated space), so `country US` with
