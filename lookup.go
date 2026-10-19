@@ -17,8 +17,8 @@ import (
 // Path into a record for DecodePath, built once rather than per
 // request. The ASN path depends on the database edition, so it lives
 // on the matcher instead (see MatchGeoIPASN.Provision). The
-// subdivision path carries an index that changes per entry, so it is
-// written where it is walked (see MatchGeoIPSubdivision.placeOf).
+// subdivision matcher reads its record with a cursor and has no path
+// (see MatchGeoIPSubdivision.placeOf).
 var countryPath = []any{"country", "iso_code"}
 
 // openDB opens the MaxMind database at path, replacing placeholders,
