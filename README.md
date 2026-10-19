@@ -25,7 +25,7 @@ This plugin follows the following rules:
    ISO 3166-2, ASNs are IANA numbers.
 
 Two limits to rule #3:
-- Unlocated addresses: If the database can’t place an address, the result is
+- Unlocated addresses: If the database can't place an address, the result is
    unknown, not a match. Use `match_unknown` cautiously if that matters to you.
 - Unmatched codes: A code the database doesn't use matches nothing. `country
    UK` will load fine but won't work, because the database spells it `GB` (the
@@ -284,8 +284,8 @@ one to run wins.
   (`WBK`), following MaxMind's `most_specific_subdivision` convention.
 - Territories with their own ISO 3166-1 code, such as Puerto Rico and Guam, are
   reported under that code rather than as subdivisions of the parent country.
-- Use the Country database for country matching (it's roughly an eighth the
-  size of City). One City database could serve both `geoip_country` and
+- Use the Country database for country matching (it's a fraction of the size
+  of City). One City database could serve both `geoip_country` and
   `geoip_subdivision` if you'd rather keep one file. `geoip_asn` always needs
   its own database unless you have Enterprise.
 
