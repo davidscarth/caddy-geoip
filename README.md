@@ -25,9 +25,9 @@ This plugin follows the following rules:
    ISO 3166-2, ASNs are IANA numbers.
 
 Two limits to rule #3:
-- Unlocated addresses: an address the database can't place is unknown. Use
-   `match_unknown` cautiously if that matters to you.
-- Unmatched codes: a code the database doesn't use matches nothing. `country
+- Unlocated addresses: If the database can’t place an address, the result is
+   unknown, not a match. Use `match_unknown` cautiously if that matters to you.
+- Unmatched codes: A code the database doesn't use matches nothing. `country
    UK` will load fine but won't work, because the database spells it `GB` (the
    standard ISO 3166-1 code).
 
