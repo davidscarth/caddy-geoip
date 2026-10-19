@@ -262,11 +262,9 @@ one to run wins.
   `CF-Connecting-IP`). Without it Caddy takes the left-most `X-Forwarded-For`
   entry, which a client can forge if your proxy appends to the header rather
   than replacing it.
-- The database is memory-mapped when the config loads. After `caddy reload`
-  the new config opens the file fresh, so a replaced file is picked up. The
-  old mapping is released by the garbage collector once the old config has
-  finished draining. Have whatever downloads your database updates run
-  `caddy reload` afterward.
+- The database is memory-mapped when the config loads. Run `caddy reload
+  --force` after replacing the file (since the Caddyfile is unchanged on just a
+  database update, need --force to actually make the reload happen).
 - **Never overwrite the database file in place while Caddy is running.** The
   server reads it through a shared memory mapping, so writing into it can
   crash Caddy or corrupt lookups. Either stop Caddy first, or write the new
@@ -314,7 +312,8 @@ City-level matching, database auto-download, and rich placeholders (city name,
 coordinates, time zone) are deliberately not here.
 
 Database updates are either manually placed or
-[`geoipupdate`](https://github.com/maxmind/geoipupdate) plus `caddy reload`.
+[`geoipupdate`](https://github.com/maxmind/geoipupdate) plus `caddy reload
+--force`.
 
 ## Checks
 
