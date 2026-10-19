@@ -39,7 +39,7 @@ Not related to `aablinov/caddy-geoip`.
 xcaddy build --with github.com/davidscarth/caddy-geoip
 ```
 
-Requires Go 1.25.1 or later to build.
+Requires Go 1.26.0 or later to build.
 
 ## Syntax
 
@@ -197,8 +197,14 @@ this network" is a single condition rather than two rules that need ordering:
 
 ```caddyfile
 @blocked {
-    geoip_country { db "Country.mmdb"  country RU }
-    not geoip_asn { db "ASN.mmdb"  asn 64496 }
+    geoip_country {
+        db "Country.mmdb"
+        country RU
+    }
+    not geoip_asn {
+        db "ASN.mmdb"
+        asn 64496
+    }
 }
 abort @blocked
 ```
