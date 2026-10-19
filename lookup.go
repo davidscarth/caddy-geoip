@@ -14,17 +14,12 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 )
 
-// Paths into a record for DecodePath, built once rather than per
+// Path into a record for DecodePath, built once rather than per
 // request. The ASN path depends on the database edition, so it lives
-// on the matcher instead (see MatchGeoIPASN.Provision).
-var (
-	countryPath = []any{"country", "iso_code"}
-	// MaxMind orders subdivisions from most general to most specific,
-	// so the last entry is the most_specific_subdivision. A negative
-	// index counts from the end; out of range (no subdivisions) is
-	// not found, which leaves the target empty.
-	subdivisionPath = []any{"subdivisions", -1, "iso_code"}
-)
+// on the matcher instead (see MatchGeoIPASN.Provision). The
+// subdivision path carries an index that changes per entry, so it is
+// written where it is walked (see MatchGeoIPSubdivision.placeOf).
+var countryPath = []any{"country", "iso_code"}
 
 // openDB opens the MaxMind database at path, replacing placeholders,
 // and checks that its type contains one of the given words, so that a
@@ -88,17 +83,18 @@ func lookup(r *http.Request, placeholder string, decode func(netip.Addr) (string
 	return value, nil
 }
 
-// lookupPlace returns the country code and the most specific
-// subdivision code for the client of r, decoded from one record by
-// decode, and exposes them as the {geoip.country} and
+// lookupPlace returns the country code, the most specific subdivision
+// code, and whether the client of r matched, all decoded from one
+// record by decode, and exposes the codes as the {geoip.country} and
 // {geoip.subdivision} placeholders. An IP that cannot be resolved
-// yields two empty strings.
-func lookupPlace(r *http.Request, decode func(netip.Addr) (string, string, error)) (string, string, error) {
+// yields two empty strings and no match.
+func lookupPlace(r *http.Request, decode func(netip.Addr) (string, string, bool, error)) (string, string, bool, error) {
 	var country, subdivision string
+	var matched bool
 	if ip := clientIP(r); ip.IsValid() {
 		var err error
-		if country, subdivision, err = decode(ip); err != nil {
-			return "", "", err
+		if country, subdivision, matched, err = decode(ip); err != nil {
+			return "", "", false, err
 		}
 	}
 	// Both come from one record, so they are published together or a
@@ -113,7 +109,7 @@ func lookupPlace(r *http.Request, decode func(netip.Addr) (string, string, error
 		overwritePlaceholder(r, "geoip.country", country)
 		overwritePlaceholder(r, "geoip.subdivision", subdivision)
 	}
-	return country, subdivision, nil
+	return country, subdivision, matched, nil
 }
 
 // setPlaceholder exposes value as the named placeholder. A value is

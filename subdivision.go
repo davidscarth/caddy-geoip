@@ -30,10 +30,11 @@ func init() {
 // code elsewhere. Together the two fields form an ISO 3166-2 code, so
 // country US with subdivision CA is US-CA.
 //
-// Where a country has nested subdivisions, only the most specific one
-// is matched, following MaxMind's most_specific_subdivision convention.
-// An address in Boxford, England reports ENG and WBK, and matches WBK;
-// it does not match ENG.
+// A client is in every subdivision of the record, which MaxMind orders
+// from most general to most specific: an address in Boxford, England
+// reports ENG then WBK and is in both, so a rule on either matches.
+// The {geoip.subdivision} placeholder still reports the most specific
+// code, WBK, whatever the rule matched on.
 type MatchGeoIPSubdivision struct {
 	// Path to a City or Enterprise database. Supports placeholders.
 	DB string `json:"db,omitempty"`
@@ -123,7 +124,7 @@ func (m *MatchGeoIPSubdivision) MatchWithError(r *http.Request) (bool, error) {
 		return false, fmt.Errorf("geoip_subdivision: not provisioned")
 	}
 
-	country, subdivision, err := lookupPlace(r, m.placeOf)
+	country, subdivision, matched, err := lookupPlace(r, m.placeOf)
 	if err != nil {
 		return false, err
 	}
@@ -138,32 +139,45 @@ func (m *MatchGeoIPSubdivision) MatchWithError(r *http.Request) (bool, error) {
 	if subdivision == "" {
 		return m.MatchUnknown, nil
 	}
-	_, ok := m.subdivisions[strings.ToUpper(subdivision)]
-	return ok, nil
+	return matched, nil
 }
 
-// placeOf returns the country code and the most specific subdivision
-// code for ip, both decoded from one record. Either is empty if the
-// database has no entry for it. Both are decoded whatever the country
-// turns out to be, so the placeholders report what the database knows
-// even for a request this matcher does not match.
-func (m *MatchGeoIPSubdivision) placeOf(ip netip.Addr) (string, string, error) {
+// placeOf returns the country code, the most specific subdivision
+// code, and whether any subdivision of ip is in the configured set,
+// all from one record. Either code is empty if the database has no
+// entry for it. Both are decoded whatever the country turns out to
+// be, so the placeholders report what the database knows even for a
+// request this matcher does not match.
+//
+// Entries are read by index into one variable, so no slice is built
+// per request, and the walk continues past a hit so the code returned
+// is the innermost one for the placeholder.
+//
+// An entry with no iso_code ends the walk, because an empty string is
+// how the reader reports both an index past the end and a missing
+// field. MaxMind orders the array largest first and in practice only
+// the finest level lacks a code, so the entries skipped are the
+// uncoded ones, which a rule could not name anyway. A record whose
+// only entry is uncoded yields an empty subdivision, which is unknown.
+func (m *MatchGeoIPSubdivision) placeOf(ip netip.Addr) (country, subdivision string, matched bool, err error) {
 	result := m.db.Lookup(ip)
-
-	var country string
-	if err := result.DecodePath(&country, countryPath...); err != nil {
-		return "", "", err
+	if err = result.DecodePath(&country, countryPath...); err != nil {
+		return "", "", false, err
 	}
-
-	// Only the most specific subdivision is read (see subdivisionPath).
-	// If it carries no code the client is unknown at this level rather
-	// than a member of a more general subdivision they did not
-	// configure.
-	var subdivision string
-	if err := result.DecodePath(&subdivision, subdivisionPath...); err != nil {
-		return "", "", err
+	var code string
+	for i := 0; ; i++ {
+		code = ""
+		if err = result.DecodePath(&code, "subdivisions", i, "iso_code"); err != nil {
+			return "", "", false, err
+		}
+		if code == "" {
+			return country, subdivision, matched, nil
+		}
+		subdivision = code
+		if _, ok := m.subdivisions[strings.ToUpper(code)]; ok {
+			matched = true
+		}
 	}
-	return country, subdivision, nil
 }
 
 // isSubdivisionCode reports whether s has the shape of the second part

@@ -677,9 +677,9 @@ func TestSubdivisionMatch(t *testing.T) {
 		// The country scopes the subdivision: WA is a US state, so a
 		// GB rule must not match it even though the code is listed.
 		{"country scopes the code", "GB", []string{"WA"}, "216.160.83.56:1234", false},
-		// Boxford reports ENG then WBK; only the most specific matches.
-		{"most specific matches", "GB", []string{"WBK"}, "2.125.160.216:1234", true},
-		{"more general does not", "GB", []string{"ENG"}, "2.125.160.216:1234", false},
+		// Boxford reports ENG then WBK; the client is in both.
+		{"innermost matches", "GB", []string{"WBK"}, "2.125.160.216:1234", true},
+		{"outer level matches", "GB", []string{"ENG"}, "2.125.160.216:1234", true},
 		// A native IPv6 record that carries a subdivision.
 		{"native IPv6", "US", []string{"CA"}, "[2001:480::1]:1234", true},
 	}
@@ -775,6 +775,22 @@ func TestSubdivisionPlaceholders(t *testing.T) {
 	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != "GB-WBK" {
 		t.Errorf("placeholders: expected GB-WBK, got %q", got)
+	}
+
+	// A rule on the outer level matches, but the placeholder still
+	// reports the most specific code, so the walk must not stop at
+	// the hit.
+	outer := MatchGeoIPSubdivision{DB: cityDB, Country: "GB", Subdivisions: []string{"ENG"}}
+	if err := outer.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	r = newRequest("2.125.160.216:1234")
+	if got, err := outer.MatchWithError(r); err != nil || !got {
+		t.Fatalf("outer level: got %v, %v, want match", got, err)
+	}
+	repl = r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != "GB-WBK" {
+		t.Errorf("outer level placeholders: expected GB-WBK, got %q", got)
 	}
 
 	// An unknown IP must still set both, to empty strings.
