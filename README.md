@@ -21,7 +21,7 @@ This plugin follows the following rules:
    Don't duplicate something Caddy already does well.
 3. **Fail early, or fail closed.** A bad configuration is rejected when Caddy
    loads, a failed lookup stops the request rather than letting it through.
-4. **Standard identifiers only.** Countries are ISO 3166-1, subdivisions are
+4. **Use standard identifiers.** Countries are ISO 3166-1, subdivisions are
    ISO 3166-2, ASNs are IANA numbers.
 
 Two limits to rule #3:
@@ -280,8 +280,8 @@ one to run wins.
 - `geoip_subdivision` matches when the client is inside a listed subdivision
   at any level. Where a country has nested subdivisions - an address in
   Boxford reports `ENG` then `WBK` - a rule on either matches, since the
-  client is in both. `{geoip.subdivision}` still reports the most specific
-  code (`WBK`), following MaxMind's `most_specific_subdivision` convention.
+  client is in both. `{geoip.subdivision}` reports the most specific code
+  (`WBK`), following MaxMind's `most_specific_subdivision` convention.
 - Territories with their own ISO 3166-1 code, such as Puerto Rico and Guam, are
   reported under that code rather than as subdivisions of the parent country.
 - Use the Country database for country matching (it's roughly an eighth the
@@ -319,7 +319,7 @@ Database updates are either manually placed or
 
 ## Checks
 
-Built and tested against Caddy v2.11.4 and maxminddb-golang v2.6.0, with no
+Built and tested against Caddy v2.11.7 and maxminddb-golang v2.6.0, with no
 other dependencies.
 
 The code passes:
