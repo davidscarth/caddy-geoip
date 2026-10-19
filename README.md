@@ -271,10 +271,11 @@ one to run wins.
   needs from the record. There is no per-request caching.
 - The matchers use MaxMind's located `country`, not `registered_country`. An
   IP whose location MaxMind cannot determine is unknown and treated as such.
-- `geoip_subdivision` matches the most specific subdivision MaxMind reports,
-  following their `most_specific_subdivision` convention. Where a country has
-  nested subdivisions - an address in Boxford reports `ENG` then `WBK` - only
-  the innermost (`WBK`) matches.
+- `geoip_subdivision` matches when the client is inside a listed subdivision
+  at any level. Where a country has nested subdivisions - an address in
+  Boxford reports `ENG` then `WBK` - a rule on either matches, since the
+  client is in both. `{geoip.subdivision}` still reports the most specific
+  code (`WBK`), following MaxMind's `most_specific_subdivision` convention.
 - Territories with their own ISO 3166-1 code, such as Puerto Rico and Guam, are
   reported under that code rather than as subdivisions of the parent country.
 - Use the Country database for country matching (it's roughly an eighth the
