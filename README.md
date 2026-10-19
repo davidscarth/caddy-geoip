@@ -71,9 +71,8 @@ scopes the codes. `match_unknown` is optional everywhere.
 - **db** - path to a Country, City, or Enterprise database for `geoip_country`,
   a City or Enterprise database for `geoip_subdivision`, or an ASN, ISP, or
   Enterprise database for `geoip_asn`. The database type is checked when the
-  config loads, so a file that lacks the field a matcher reads is rejected
-  rather than silently matching nothing. Placeholders such as `{env.GEOIP_DB}`
-  are resolved.
+  config loads, so a Country file is not silently used for ASN matching or vice
+  versa. Placeholders such as `{env.GEOIP_DB}` are resolved.
 - **country** - ISO 3166-1 alpha-2 codes, case-insensitive. On
   `geoip_subdivision` it is a single code, because subdivision codes are only
   unique within a country.
@@ -333,12 +332,21 @@ Tested against MaxMind's `GeoLite2-Country`, `GeoIP2-Country`, `GeoLite2-City`,
 `GeoIP2-City`, `GeoLite2-ASN`, `GeoIP2-ISP`, and `GeoIP2-Enterprise` test
 databases, and running in production with the free GeoLite2 editions.
 
-DB-IP compatibility is not supported and depends on the vendor shipping
-compliant databases. A smoke test was performed with DB-IP's Lite databases
-(September 2026). The Country Lite and ASN Lite MMDB files appear to work with
-`geoip_country` and `geoip_asn` as drop-in replacements for GeoLite2, no code
-changes needed. *However* City Lite **does not work** for `geoip_subdivision`,
-as the free version does not appear to include ISO 3166-2 codes.
+## Other vendors
+
+The matchers read MaxMind's GeoIP2 record layout: `country.iso_code`,
+`subdivisions[].iso_code`, and `autonomous_system_number`. A file that
+uses that layout works regardless of who built it. A file that doesn't
+will still load, since the type check only looks at the database name,
+and then every address is unknown. Checked with October 2026 files:
+
+- DB-IP Lite: Country and ASN work as drop-in replacements for GeoLite2.
+  However, City carries subdivision names without ISO 3166-2 codes, so
+  `geoip_subdivision` matches nothing and `{geoip.subdivision}` is always
+  empty. **Do not use the DB-IP City database.**
+- IPLocate.io free databases: not compatible. They use their own record
+  layout (`country_code`, `asn` as text), so both files load and every
+  address is unknown. **Do not use the IPLocate databases.**
 
 ## License
 
