@@ -21,13 +21,6 @@ follows:
 4. **Use standard identifiers.** Countries are ISO 3166-1, subdivisions are
    ISO 3166-2, ASNs are IANA numbers.
 
-Limits to rule #3:
-- An IP that isn't in the database is unknown, not a match. Use
-  `match_unknown` cautiously if that matters to you.
-- A code the database doesn't use won't throw an error, but it won't match
-  anything. `country UK` will load fine but do nothing, because the database
-  uses `GB` (ISO 3166-1). Check your codes.
-
 ## Install
 
 ```shell
@@ -248,6 +241,11 @@ one to run wins.
 
 ## Notes
 
+- An IP that isn't in the database is unknown, not a match. Use
+  `match_unknown` cautiously if that matters to you.
+- A code the database doesn't use won't throw an error, but it won't match
+  anything. `country UK` will load fine but do nothing, because the database
+  uses `GB` (ISO 3166-1). Check your codes.
 - The client IP is Caddy's `client_ip`: the connection's remote address, unless
   that address is in the server's `trusted_proxies`, in which case Caddy takes
   the real client from `X-Forwarded-For`. With no trusted proxies configured, a
