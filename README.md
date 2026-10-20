@@ -5,12 +5,9 @@ using [MaxMind](https://www.maxmind.com/) GeoLite2/GeoIP2
 
 ## Why
 
-I wanted to block a list of countries in Caddy but the popular plugin for this
-requires a double negative. Its matcher means "this request passes the filter,"
-so to *block* a deny list you have to write `not` in front of it. It works, but
-it always just irked me when looking at my Caddyfile.
-
-This plugin follows the following rules:
+I wanted a simple GeoIP matcher that was small, fast, and secure. I didn't like
+my options for one reason or another, so I made this. These are the rules it
+follows:
 
 1. **The matcher just matches.** It tests whether the IP is in the country,
    subdivision, or ASN list. That's it. You decide what happens to it...
@@ -24,14 +21,12 @@ This plugin follows the following rules:
 4. **Use standard identifiers.** Countries are ISO 3166-1, subdivisions are
    ISO 3166-2, ASNs are IANA numbers.
 
-Two limits to rule #3:
-- Unlocated addresses: If the database can't place an address, the result is
-   unknown, not a match. Use `match_unknown` cautiously if that matters to you.
-- Unmatched codes: A code the database doesn't use matches nothing. `country
-   UK` will load fine but won't work, because the database spells it `GB` (the
-   standard ISO 3166-1 code).
-
-Not related to `aablinov/caddy-geoip`.
+Limits to rule #3:
+- An IP that isn't in the database is unknown, not a match. Use
+  `match_unknown` cautiously if that matters to you.
+- A code the database doesn't use won't throw an error, but it won't match
+  anything. `country UK` will load fine but do nothing, because the database
+  uses `GB` (ISO 3166-1). Check your codes.
 
 ## Install
 
@@ -335,9 +330,9 @@ databases, and running in production with the free GeoLite2 editions.
 
 The matchers read MaxMind's GeoIP2 record layout: `country.iso_code`,
 `subdivisions[].iso_code`, and `autonomous_system_number`. A file that
-uses that layout works regardless of who built it. A file that doesn't
+uses that layout will work regardless of who built it. A file that doesn't
 will still load, since the type check only looks at the database name,
-and then every address is unknown. Checked with October 2026 files:
+but then it won't work. Checked with October 2026 files:
 
 - DB-IP Lite: Country and ASN work as drop-in replacements for GeoLite2.
   However, City carries subdivision names without ISO 3166-2 codes, so
