@@ -70,26 +70,21 @@ func (f anonFlags) mask() uint8 {
 	return m
 }
 
-// kindsOf names the kinds set in mask, comma-separated in anonKinds
-// order, or an empty string for none. A single kind is returned as the
-// constant itself, so the common case does not allocate.
-func kindsOf(mask uint8) string {
-	var parts [len(anonKinds)]string
-	n := 0
-	for i, kind := range anonKinds {
-		if mask&(1<<i) != 0 {
-			parts[n] = kind
-			n++
+// anonNames[mask] is the placeholder text for mask: the kinds set in
+// it, comma-separated in anonKinds order, or empty for none. Built once,
+// so a flagged request does not allocate to name its kinds.
+var anonNames = func() (names [1 << len(anonKinds)]string) {
+	for mask := range names {
+		var parts []string
+		for i, kind := range anonKinds {
+			if mask&(1<<i) != 0 {
+				parts = append(parts, kind)
+			}
 		}
+		names[mask] = strings.Join(parts, ",")
 	}
-	switch n {
-	case 0:
-		return ""
-	case 1:
-		return parts[0]
-	}
-	return strings.Join(parts[:n], ",")
-}
+	return names
+}()
 
 // CaddyModule returns the Caddy module information.
 func (MatchGeoIPAnonymous) CaddyModule() caddy.ModuleInfo {
@@ -163,7 +158,7 @@ func (m *MatchGeoIPAnonymous) MatchWithError(r *http.Request) (bool, error) {
 		}
 	}
 	mask := f.mask()
-	setPlaceholder(r, "geoip.anonymous", kindsOf(mask))
+	setPlaceholder(r, "geoip.anonymous", anonNames[mask])
 	return mask&m.types != 0, nil
 }
 
