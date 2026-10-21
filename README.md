@@ -241,11 +241,19 @@ one to run wins.
 
 ## Notes
 
+#### Matching
 - An IP that isn't in the database is unknown, not a match. Use
   `match_unknown` cautiously if that matters to you.
 - A code the database doesn't use won't throw an error, but it won't match
   anything. `country UK` will load fine but do nothing, because the database
   uses `GB` (ISO 3166-1). Check your codes.
+- The matchers use MaxMind's located `country`, not `registered_country`.
+- Territories with their own ISO 3166-1 code, such as Puerto Rico and Guam, are
+  reported under that code rather than as subdivisions of the parent country.
+- `geoip_subdivision` matches any level. Boxford reports `ENG` then `WBK`, so
+  a rule on either matches. For that example `{geoip.subdivision}` reports `WBK`.
+
+#### Client IP
 - The client IP is Caddy's `client_ip`: the connection's remote address, unless
   that address is in the server's `trusted_proxies`, in which case Caddy takes
   the real client from `X-Forwarded-For`. With no trusted proxies configured, a
@@ -255,29 +263,19 @@ one to run wins.
   `CF-Connecting-IP`). Without it Caddy takes the left-most `X-Forwarded-For`
   entry, which a client can forge if your proxy appends to the header rather
   than replacing it.
+
+#### Database
+- Use the Country database for country matching (it's a fraction of the size
+  of City). One City database could serve both `geoip_country` and
+  `geoip_subdivision` if you'd rather keep one file. `geoip_asn` always needs
+  its own database unless you have Enterprise.
 - The database is memory-mapped when the config loads. Run `caddy reload
   --force` after replacing the file (since the Caddyfile is unchanged on just a
   database update, need --force to actually make the reload happen).
 - **Never overwrite the database file in place while Caddy is running.** The
   server reads it through a shared memory mapping, so writing into it can
-  crash Caddy or corrupt lookups. Either stop Caddy first, or write the new
-  file under a temporary name and rename it over the old one, which is what
-  `geoipupdate` does by default.
-- Each matcher does its own lookup when it runs, decoding only the fields it
-  needs from the record. There is no per-request caching.
-- The matchers use MaxMind's located `country`, not `registered_country`. An
-  IP whose location MaxMind cannot determine is unknown and treated as such.
-- `geoip_subdivision` matches when the client is inside a listed subdivision
-  at any level. Where a country has nested subdivisions - an address in
-  Boxford reports `ENG` then `WBK` - a rule on either matches, since the
-  client is in both. `{geoip.subdivision}` reports the most specific code
-  (`WBK`), following MaxMind's `most_specific_subdivision` convention.
-- Territories with their own ISO 3166-1 code, such as Puerto Rico and Guam, are
-  reported under that code rather than as subdivisions of the parent country.
-- Use the Country database for country matching (it's a fraction of the size
-  of City). One City database could serve both `geoip_country` and
-  `geoip_subdivision` if you'd rather keep one file. `geoip_asn` always needs
-  its own database unless you have Enterprise.
+  crash Caddy or corrupt lookups. Either stop Caddy first, or replace atomically,
+  which is what `geoipupdate` does by default.
 
 ## JSON
 
@@ -330,15 +328,31 @@ The matchers read MaxMind's GeoIP2 record layout: `country.iso_code`,
 `subdivisions[].iso_code`, and `autonomous_system_number`. A file that
 uses that layout will work regardless of who built it. A file that doesn't
 will still load, since the type check only looks at the database name,
-but then it won't work. Checked with October 2026 files:
+but then it won't work. Below were checked with October 2026 files.
 
-- DB-IP Lite: Country and ASN work as drop-in replacements for GeoLite2.
-  However, City carries subdivision names without ISO 3166-2 codes, so
+#### Tested, seems working
+
+- DB-IP Lite [Country](https://db-ip.com/db/download/ip-to-country-lite)
+  and [ASN](https://db-ip.com/db/download/ip-to-asn-lite) (CC BY 4.0): drop-in
+  replacements for GeoLite2.
+- Geoacumen [Country](https://github.com/geoacumen/geoacumen-country)
+  (Apache-2.0): works. Private and reserved ranges carry the literal code
+  `None` rather than no record, so `match_unknown` does not cover them. Exempt
+  the LAN with `client_ip private_ranges` as usual.
+- sapics [origin-asn IPv4+IPv6](https://github.com/sapics/ip-location-db#asn)
+  (PDDL): works with `geoip_asn`. Built from BGP routing data, updated daily.
+
+#### Tested, not working
+
+- DB-IP Lite City: subdivision names are without ISO 3166-2 codes, so
   `geoip_subdivision` matches nothing and `{geoip.subdivision}` is always
   empty. **Do not use the DB-IP City database.**
-- IPLocate.io free databases: not compatible. They use their own record
-  layout (`country_code`, `asn` as text), so both files load and every
-  address is unknown. **Do not use the IPLocate databases.**
+- IPLocate.io free databases: own record layout (`country_code`, `asn` as
+  text). Both files load and every address is unknown. **Do not use the
+  IPLocate databases.**
+- sapics `user-country` and `server-country`: own record layout
+  (`country_code`), so `geoip_country` loads them and every address is
+  unknown. Their ASN file above is the exception.
 
 ## License
 
