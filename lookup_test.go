@@ -69,6 +69,7 @@ func TestModuleIDs(t *testing.T) {
 		"http.matchers.geoip_country":     MatchGeoIPCountry{},
 		"http.matchers.geoip_subdivision": MatchGeoIPSubdivision{},
 		"http.matchers.geoip_asn":         MatchGeoIPASN{},
+		"http.matchers.geoip_anonymous":   MatchGeoIPAnonymous{},
 	} {
 		info := m.CaddyModule()
 		if got := string(info.ID); got != want {
@@ -196,6 +197,7 @@ func TestLookupErrorFailsClosed(t *testing.T) {
 	country := &MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}}
 	asn := &MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}}
 	subdivision := &MatchGeoIPSubdivision{DB: cityDB, Country: "US", Subdivisions: []string{"WA"}}
+	anonymous := &MatchGeoIPAnonymous{DB: anonDB, Types: []string{"vpn"}}
 
 	for name, tc := range map[string]struct {
 		provision func() error
@@ -216,6 +218,11 @@ func TestLookupErrorFailsClosed(t *testing.T) {
 			func() error { return subdivision.Provision(caddy.Context{}) },
 			func() error { return subdivision.db.Close() },
 			subdivision.MatchWithError,
+		},
+		"anonymous": {
+			func() error { return anonymous.Provision(caddy.Context{}) },
+			func() error { return anonymous.db.Close() },
+			anonymous.MatchWithError,
 		},
 	} {
 		if err := tc.provision(); err != nil {
@@ -243,6 +250,7 @@ func TestUnprovisionedFailsClosed(t *testing.T) {
 		"country":     &MatchGeoIPCountry{},
 		"asn":         &MatchGeoIPASN{},
 		"subdivision": &MatchGeoIPSubdivision{},
+		"anonymous":   &MatchGeoIPAnonymous{},
 	} {
 		got, err := m.MatchWithError(r)
 		if err == nil {
@@ -348,6 +356,7 @@ func TestEarlyDataRejected(t *testing.T) {
 		"subdivision": &MatchGeoIPSubdivision{
 			DB: cityDB, Country: "GB", Subdivisions: []string{"ENG"},
 		},
+		"anonymous": &MatchGeoIPAnonymous{DB: anonDB, Types: []string{"vpn"}},
 	}
 
 	for name, m := range matchers {
