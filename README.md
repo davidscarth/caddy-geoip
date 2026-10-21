@@ -328,7 +328,8 @@ The matchers read MaxMind's GeoIP2 record layout: `country.iso_code`,
 `subdivisions[].iso_code`, and `autonomous_system_number`. A file that
 uses that layout will work regardless of who built it. A file that doesn't
 will still load, since the type check only looks at the database name,
-but then it won't work. Below were checked with October 2026 files.
+but then it won't work. Below were checked with October 2026 files. None
+of them are supported, and results may change with any update on their side.
 
 #### Tested, seems working
 
@@ -353,6 +354,13 @@ but then it won't work. Below were checked with October 2026 files.
 - sapics `user-country` and `server-country`: own record layout
   (`country_code`), so `geoip_country` loads them and every address is
   unknown. Their ASN file above is the exception.
+
+To check a file not listed here, use MaxMind's
+[`mmdbinspect`](https://github.com/maxmind/mmdbinspect) tool:
+`mmdbinspect -db file.mmdb 216.160.83.56`. It should work if the record
+has `country` with `iso_code` inside for `geoip_country`, `subdivisions`
+whose entries have `iso_code` for `geoip_subdivision`, or
+`autonomous_system_number` for `geoip_asn`.
 
 ## License
 
