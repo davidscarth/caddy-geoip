@@ -218,7 +218,7 @@ func TestAnonymousPlaceholder(t *testing.T) {
 	}
 }
 
-func TestKindsOf(t *testing.T) {
+func TestAnonNames(t *testing.T) {
 	for mask, want := range map[uint8]string{
 		0:  "",
 		1:  "anonymous",
@@ -226,8 +226,8 @@ func TestKindsOf(t *testing.T) {
 		3:  "anonymous,vpn",
 		63: "anonymous,vpn,tor,hosting,public_proxy,residential_proxy",
 	} {
-		if got := kindsOf(mask); got != want {
-			t.Errorf("kindsOf(%d) = %q, want %q", mask, got, want)
+		if got := anonNames[mask]; got != want {
+			t.Errorf("anonNames[%d] = %q, want %q", mask, got, want)
 		}
 	}
 }
