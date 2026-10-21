@@ -99,12 +99,12 @@ func TestIsSubdivisionCode(t *testing.T) {
 		want bool
 	}{
 		{"CA", true},
-		{"E", true},    // Östergötland County, Sweden
-		{"ENG", true},  // England
-		{"WBK", true},  // West Berkshire
-		{"22", true},   // Jilin, China
-		{"971", true},  // Guadeloupe, France
-		{"ca", true},   // case is folded
+		{"E", true},   // Östergötland County, Sweden
+		{"ENG", true}, // England
+		{"WBK", true}, // West Berkshire
+		{"22", true},  // Jilin, China
+		{"971", true}, // Guadeloupe, France
+		{"ca", true},  // case is folded
 		{"", false},
 		{"CALI", false},
 		{"US-CA", false},

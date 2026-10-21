@@ -269,15 +269,15 @@ func TestCountryMatch(t *testing.T) {
 		remoteAddr string
 		want       bool
 	}{
-		{"81.2.69.142:1234", true},         // GB, lower-case in config
-		{"216.160.83.56:1234", true},       // US
-		{"89.160.20.128:1234", false},      // SE, not listed
-		{"10.1.2.3:1234", false},           // private, no record
-		{"127.0.0.1:1234", false},          // loopback, no record
+		{"81.2.69.142:1234", true},          // GB, lower-case in config
+		{"216.160.83.56:1234", true},        // US
+		{"89.160.20.128:1234", false},       // SE, not listed
+		{"10.1.2.3:1234", false},            // private, no record
+		{"127.0.0.1:1234", false},           // loopback, no record
 		{"[::ffff:81.2.69.142]:1234", true}, // IPv4-mapped IPv6
-		{"[2001:218::1]:1234", true},       // native IPv6, JP
-		{"[2a02:d500::1]:1234", false},     // record with no country field
-		{"not-an-address", false},          // unparseable, unknown
+		{"[2001:218::1]:1234", true},        // native IPv6, JP
+		{"[2a02:d500::1]:1234", false},      // record with no country field
+		{"not-an-address", false},           // unparseable, unknown
 	} {
 		got, err := m.MatchWithError(newRequest(tc.remoteAddr))
 		if err != nil {
@@ -303,8 +303,8 @@ func TestCountryMatchUnknown(t *testing.T) {
 	if got, _ := m.MatchWithError(newRequest("[2a02:d500::1]:1234")); !got {
 		t.Error("expected record without country to count as unknown")
 	}
-	if got, _ := m.MatchWithError(newRequest("216.160.83.56:1234")); got {
-		t.Error("expected US not to match GB even with match_unknown")
+	if got, err := m.MatchWithError(newRequest("216.160.83.56:1234")); err != nil || got {
+		t.Errorf("expected US not to match GB even with match_unknown, got %v (%v)", got, err)
 	}
 	// A client whose address cannot be parsed at all (a Unix socket
 	// listener) is unknown in the same sense as an absent record.
@@ -454,15 +454,15 @@ func TestSetPlaceholder(t *testing.T) {
 		{name: "first answer is recorded", write: "US", want: "US", wantKnown: true},
 		{name: "unknown sets a known empty", write: "", want: "", wantKnown: true},
 		{
-			name: "an answer is not erased by a later blank",
+			name:     "an answer is not erased by a later blank",
 			existing: "US", preset: true, write: "", want: "US", wantKnown: true,
 		},
 		{
-			name: "a blank is replaced by a later answer",
+			name:   "a blank is replaced by a later answer",
 			preset: true, write: "GB", want: "GB", wantKnown: true,
 		},
 		{
-			name: "a later answer wins over an earlier one",
+			name:     "a later answer wins over an earlier one",
 			existing: "US", preset: true, write: "GB", want: "GB", wantKnown: true,
 		},
 	} {
@@ -750,8 +750,8 @@ func TestSubdivisionCountryMismatchIsNotUnknown(t *testing.T) {
 	}
 
 	r := newRequest("216.160.83.56:1234")
-	if got, _ := m.MatchWithError(r); got {
-		t.Error("expected a US address not to match a GB rule")
+	if got, err := m.MatchWithError(r); err != nil || got {
+		t.Errorf("expected a US address not to match a GB rule, got %v (%v)", got, err)
 	}
 
 	// The placeholders still report what the database knows, even
