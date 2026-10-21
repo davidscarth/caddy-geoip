@@ -336,6 +336,15 @@ of them are supported, and results may change with any update on their side.
 - DB-IP Lite [Country](https://db-ip.com/db/download/ip-to-country-lite)
   and [ASN](https://db-ip.com/db/download/ip-to-asn-lite) (CC BY 4.0): drop-in
   replacements for GeoLite2.
+- IP2Location LITE
+  [Country (DB1)](https://lite.ip2location.com/database/db1-ip-country)
+  (CC BY-SA 4.0),
+  [City (DB11)](https://lite.ip2location.com/database/db11-ip-country-region-city-latitude-longitude-zipcode-timezone)
+  and [ASN](https://lite.ip2location.com/database-asn)
+  ([Proprietary](https://lite.ip2location.com/terms-of-use)): all three
+  work as drop-in replacements, in MMDB format. Their City DB carries ISO
+  3166-2 codes (in their MMDB, not in their CSV, so don't convert it
+  yourself).
 - Geoacumen [Country](https://github.com/geoacumen/geoacumen-country)
   (Apache-2.0): works. Private and reserved ranges carry the literal code
   `None` rather than no record, so `match_unknown` does not cover them. Exempt
