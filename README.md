@@ -353,7 +353,8 @@ of them are supported, and results may change with any update on their side.
   IPLocate databases.**
 - sapics `user-country` and `server-country`: own record layout
   (`country_code`), so `geoip_country` loads them and every address is
-  unknown. Their ASN file above is the exception.
+  unknown. Their ASN file above is the exception. **Do not use the sapics
+  country databases.**
 
 To check a file not listed here, use MaxMind's
 [`mmdbinspect`](https://github.com/maxmind/mmdbinspect) tool:
