@@ -60,8 +60,9 @@ Requires Go 1.26.0 or later to build.
 ```
 
 `db` is required on every matcher, along with at least one `country`,
-`subdivision`, or `asn`. `geoip_subdivision` also requires `country`, which
-scopes the codes. `match_unknown` is optional on the geolocation matchers.
+`subdivision`, `asn`, or `type`. `geoip_subdivision` also requires `country`,
+which scopes the codes. `match_unknown` is optional on the geolocation
+matchers.
 
 - **db** - path to a Country, City, or Enterprise database for `geoip_country`,
   a City or Enterprise database for `geoip_subdivision`, or an ASN, ISP, or
@@ -77,7 +78,7 @@ scopes the codes. `match_unknown` is optional on the geolocation matchers.
 - **asn** - autonomous system numbers as plain integers, no `AS` prefix.
 - **type** - kinds of anonymizer to match, any of `anonymous`, `vpn`, `tor`,
   `hosting`, `public_proxy`, `residential_proxy`. These are MaxMind's
-  Anonymous IP flags; `anonymous` is the umbrella, set whenever any other is.
+  Anonymous IP flags (`anonymous` is the umbrella, set whenever any other is).
   Needs an Anonymous IP, Anonymous Plus, or IP Risk database.
 - **match_unknown** - use with caution. Matches IPs the database has no entry
   for (loopback, private ranges, unallocated space), so `country US` with
