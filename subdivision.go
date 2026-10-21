@@ -110,10 +110,9 @@ func (m *MatchGeoIPSubdivision) Validate() error {
 // MatchWithError returns true if the client of r is in the configured
 // country and in one of the configured subdivisions.
 func (m *MatchGeoIPSubdivision) MatchWithError(r *http.Request) (bool, error) {
-	// if handshake is not finished, we infer 0-RTT that has
-	// not verified remote IP; could be spoofed, so we throw
-	// HTTP 425 status to tell the client to try again after
-	// the handshake is complete
+	// Early data (0-RTT) arrives before the handshake has verified the
+	// client address, so refuse it with 425 until the handshake completes,
+	// same as Caddy's own IP matchers do.
 	if r.TLS != nil && !r.TLS.HandshakeComplete {
 		return false, caddyhttp.Error(http.StatusTooEarly,
 			fmt.Errorf("TLS handshake not complete, client IP cannot be verified"))
