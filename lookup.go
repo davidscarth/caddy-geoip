@@ -1,5 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
+// caddy-geoip provides small, fast, and safe GeoIP geolocation
+// matchers for Caddy, using MaxMind-compatible databases: country,
+// subdivision, and autonomous system (ASN).
+//
+// The matchers only match. Blocking, allowing, routing, logging, and
+// exemptions are written with Caddy's own directives. Each lookup reads
+// one field from a memory-mapped database, with no locks and no
+// per-request caching. The client IP is the one Caddy verified through
+// trusted_proxies; a request in TLS early data is refused until the
+// handshake completes. A bad configuration is rejected when the config
+// loads and a failed lookup stops the request rather than letting it
+// through. The only dependencies are Caddy and maxminddb-golang.
 package caddygeoip
 
 import (

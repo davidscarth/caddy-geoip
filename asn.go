@@ -20,10 +20,9 @@ func init() {
 	caddy.RegisterModule(MatchGeoIPASN{})
 }
 
-// MatchGeoIPASN matches requests whose client IP belongs to one of the
-// configured autonomous systems, according to a MaxMind GeoLite2 or
-// GeoIP2 ASN database. Use Caddy's `not` for the complement, and
-// Caddy's `abort`, `respond`, or `redir` to act on the match.
+// MatchGeoIPCountry is a small, fast, and safe GeoIP geolocation
+// matcher using MaxMind-compatible databases. It matches requests by
+// the client's country and sets {geoip.country}.
 type MatchGeoIPASN struct {
 	// Path to an ASN, ISP, or Enterprise database. Supports placeholders.
 	DB string `json:"db,omitempty"`

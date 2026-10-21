@@ -19,10 +19,9 @@ func init() {
 	caddy.RegisterModule(MatchGeoIPCountry{})
 }
 
-// MatchGeoIPCountry matches requests whose client IP is located in one of
-// the configured countries, according to a MaxMind GeoLite2 or GeoIP2
-// Country (or City) database. Use Caddy's `not` for the complement,
-// and Caddy's `abort`, `respond`, or `redir` to act on the match.
+// MatchGeoIPCountry is a small, fast, and safe GeoIP geolocation
+// matcher using MaxMind-compatible databases. It matches requests by
+// the client's country and sets {geoip.country}.
 type MatchGeoIPCountry struct {
 	// Path to a Country, City, or Enterprise database. Supports placeholders.
 	DB string `json:"db,omitempty"`

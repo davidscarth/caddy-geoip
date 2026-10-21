@@ -20,22 +20,21 @@ func init() {
 	caddy.RegisterModule(MatchGeoIPSubdivision{})
 }
 
-// MatchGeoIPSubdivision matches requests whose client IP is located in
-// one of the configured subdivisions of a country, according to a
-// MaxMind GeoLite2 or GeoIP2 City (or Enterprise) database. Use Caddy's
-// `not` for the complement, and Caddy's `abort`, `respond`, or `redir`
-// to act on the match.
+// MatchGeoIPSubdivision is a small, fast, and safe GeoIP geolocation
+// matcher using MaxMind-compatible databases. It matches requests by
+// state, province, or region within a country and sets {geoip.country}
+// and {geoip.subdivision}.
 //
 // The country is required because subdivision codes are only unique
 // within a country: CA is California in the United States and a valid
 // code elsewhere. Together the two fields form an ISO 3166-2 code, so
-// country US with subdivision CA is US-CA.
+// country US with subdivision CA represents US-CA.
 //
 // A client is in every subdivision of the record, which MaxMind orders
 // from most general to most specific: an address in Boxford, England
 // reports ENG then WBK and is in both, so a rule on either matches.
-// The {geoip.subdivision} placeholder still reports the most specific
-// code, WBK, whatever the rule matched on.
+// The {geoip.subdivision} placeholder reports the most specific code,
+// whatever the rule matched on.
 type MatchGeoIPSubdivision struct {
 	// Path to a City or Enterprise database. Supports placeholders.
 	DB string `json:"db,omitempty"`
