@@ -84,9 +84,9 @@ scopes the codes. `match_unknown` is optional on the geolocation matchers.
   `match_unknown` matches a US client and your LAN. On `geoip_subdivision` a
   record with a country but no subdivision counts as unknown too. Off by
   default. Under `not` it makes an allow list fail open, so prefer
-  `client_ip private_ranges` to exempt the LAN. Not offered on
-  `geoip_anonymous` (there is no unknown state, anything not in the db
-  is not considered anonymous).
+  `client_ip private_ranges` to exempt the LAN. Doesn't exist for
+  `geoip_anonymous` (as there is no unknown state, anything not in the db
+  is just not considered anonymous).
 
 ## Examples
 
@@ -218,7 +218,8 @@ abort @hosting
 abort @anon
 ```
 
-Or let identified VPNs through, but only from where the site is meant to be reached:
+Or let identified VPNs through, but only from where the site is meant to be
+reached:
 
 ```caddyfile
 @vpn_abroad {
@@ -394,11 +395,11 @@ databases, and running in production with the free GeoLite2 editions.
 
 The matchers read MaxMind's GeoIP2 record layout: `country.iso_code`,
 `subdivisions[].iso_code`, `autonomous_system_number`, and the `is_*`
-anonymizer flags. A file that
-uses that layout will work regardless of who built it. A file that doesn't
-will still load, since the type check only looks at the database name,
-but then it won't work. Below were checked with October 2026 files. None
-of them are supported, and results may change with any update on their side.
+anonymizer flags. A file that uses that layout will work regardless of who
+built it. A file that doesn't will still load, since the type check only
+looks at the database name, but then it won't work. Below were checked with
+October 2026 files. None of them are supported, and results may change with
+any update on their side.
 
 #### Tested, seems working
 
@@ -416,10 +417,10 @@ of them are supported, and results may change with any update on their side.
   yourself).
 - IP2Location [IP2Proxy LITE PX10](https://lite.ip2location.com/ip2proxy-lite)
   in MMDB format ([Proprietary](https://lite.ip2location.com/terms-of-use)):
-  works with `geoip_anonymous`, but every listed address carries the same
-  two flags, `anonymous` and `public_proxy`. The proxy types in the CSV are
-  not in the MMDB, so `type vpn` or `type tor` match nothing; use `type
-  anonymous` as a block-all-known-proxies switch.
+  works with `geoip_anonymous`. The LITE edition lists public proxies only,
+  so every address carries the same two flags, `anonymous` and
+  `public_proxy`. Others such as `type vpn` or `type tor` match nothing. Use
+  `type anonymous` as a block-all-known-proxies switch.
 - Geoacumen [Country](https://github.com/geoacumen/geoacumen-country)
   (Apache-2.0): works as of 10/26/2026.
 - sapics [origin-asn IPv4+IPv6](https://github.com/sapics/ip-location-db#asn)
