@@ -361,7 +361,7 @@ To check a file not listed here, use MaxMind's
 `mmdbinspect -db file.mmdb 216.160.83.56`. It should work if the record
 has `country` with `iso_code` inside for `geoip_country`, `subdivisions`
 whose entries have `iso_code` for `geoip_subdivision`, or
-`autonomous_system_number` for `geoip_asn`.
+`autonomous_system_number` for `geoip_asn`. YMMV.
 
 ## License
 
