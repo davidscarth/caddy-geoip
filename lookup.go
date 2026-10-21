@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// caddy-geoip provides small, fast, and safe GeoIP geolocation
+// Package caddygeoip provides small, fast, and safe GeoIP geolocation
 // matchers for Caddy, using MaxMind-compatible databases: country,
 // subdivision, and autonomous system (ASN).
 //
