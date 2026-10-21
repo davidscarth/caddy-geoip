@@ -52,6 +52,11 @@ Requires Go 1.26.0 or later to build.
     asn <numbers...>
     match_unknown
 }
+
+@name geoip_anonymous {
+    db   <path>
+    type <kinds...>
+}
 ```
 
 `db` is required on every matcher, along with at least one `country`,
@@ -70,12 +75,18 @@ scopes the codes. `match_unknown` is optional everywhere.
   `US-CA`), case-insensitive. Together with **country** they represent the full
   code: `country US` with `subdivision CA` is how `US-CA` is written.
 - **asn** - autonomous system numbers as plain integers, no `AS` prefix.
+- **type** - kinds of anonymizer to match, any of `anonymous`, `vpn`, `tor`,
+  `hosting`, `public_proxy`, `residential_proxy`. These are MaxMind's
+  Anonymous IP flags; `anonymous` is the umbrella, set whenever any other is.
+  Needs an Anonymous IP, Anonymous Plus, or IP Risk database.
 - **match_unknown** - use with caution. Matches IPs the database has no entry
   for (loopback, private ranges, unallocated space), so `country US` with
   `match_unknown` matches a US client and your LAN. On `geoip_subdivision` a
   record with a country but no subdivision counts as unknown too. Off by
   default. Under `not` it makes an allow list fail open, so prefer
-  `client_ip private_ranges` to exempt the LAN.
+  `client_ip private_ranges` to exempt the LAN. Not offered on
+  `geoip_anonymous` (there is no unknown state, anything not in the db
+  is not considered anonymous).
 
 ## Examples
 
@@ -197,6 +208,32 @@ Regardless of country:
 abort @hosting
 ```
 
+#### Block anonymizers
+
+```caddyfile
+@anon geoip_anonymous {
+    db   "C:\Caddy\GeoIP2-Anonymous-IP.mmdb"
+    type vpn tor public_proxy
+}
+abort @anon
+```
+
+Or let identified VPNs through, but only from where the site is meant to be reached:
+
+```caddyfile
+@vpn_abroad {
+    geoip_anonymous {
+        db   "Anonymous.mmdb"
+        type vpn
+    }
+    not geoip_country {
+        db      "Country.mmdb"
+        country US CA
+    }
+}
+respond @vpn_abroad "VPN access is limited to North America" 403
+```
+
 #### Combine
 
 Matchers inside one named matcher are ANDed, so "Russia, except
@@ -251,7 +288,9 @@ example.com {
 ## Placeholders
 
 `{geoip.country}`, `{geoip.subdivision}`, and `{geoip.asn}` hold the client's
-ISO codes and AS number, or are empty if unknown. Each is set by the
+ISO codes and AS number, or are empty if unknown. `{geoip.anonymous}` holds
+the kinds the client is flagged with, comma-separated in the order listed
+under **type** (`anonymous,vpn,tor`), or is empty. Each is set by the
 corresponding matcher when it runs. `geoip_subdivision` sets both of the first
 two, since it reads both from one record.
 
@@ -317,6 +356,10 @@ one to run wins.
   "geoip_asn": {
     "db": "/usr/share/GeoIP/GeoLite2-ASN.mmdb",
     "asns": [16509]
+  },
+  "geoip_anonymous": {
+    "db": "/usr/share/GeoIP/GeoIP2-Anonymous-IP.mmdb",
+    "types": ["vpn", "tor"]
   }
 }
 ```
@@ -343,13 +386,15 @@ The code passes:
 - CodeQL via GitHub code scanning
 
 Tested against MaxMind's `GeoLite2-Country`, `GeoIP2-Country`, `GeoLite2-City`,
-`GeoIP2-City`, `GeoLite2-ASN`, `GeoIP2-ISP`, and `GeoIP2-Enterprise` test
+`GeoIP2-City`, `GeoLite2-ASN`, `GeoIP2-ISP`, `GeoIP2-Enterprise`,
+`GeoIP2-Anonymous-IP`, `GeoIP-Anonymous-Plus`, and `GeoIP2-IP-Risk` test
 databases, and running in production with the free GeoLite2 editions.
 
 ## Other vendors
 
 The matchers read MaxMind's GeoIP2 record layout: `country.iso_code`,
-`subdivisions[].iso_code`, and `autonomous_system_number`. A file that
+`subdivisions[].iso_code`, `autonomous_system_number`, and the `is_*`
+anonymizer flags. A file that
 uses that layout will work regardless of who built it. A file that doesn't
 will still load, since the type check only looks at the database name,
 but then it won't work. Below were checked with October 2026 files. None
@@ -369,6 +414,12 @@ of them are supported, and results may change with any update on their side.
   work as drop-in replacements, in MMDB format. Their City DB carries ISO
   3166-2 codes (in their MMDB, not in their CSV, so don't convert it
   yourself).
+- IP2Location [IP2Proxy LITE PX10](https://lite.ip2location.com/ip2proxy-lite)
+  in MMDB format ([Proprietary](https://lite.ip2location.com/terms-of-use)):
+  works with `geoip_anonymous`, but every listed address carries the same
+  two flags, `anonymous` and `public_proxy`. The proxy types in the CSV are
+  not in the MMDB, so `type vpn` or `type tor` match nothing; use `type
+  anonymous` as a block-all-known-proxies switch.
 - Geoacumen [Country](https://github.com/geoacumen/geoacumen-country)
   (Apache-2.0): works as of 10/26/2026.
 - sapics [origin-asn IPv4+IPv6](https://github.com/sapics/ip-location-db#asn)
@@ -391,8 +442,9 @@ To check a file not listed here, use MaxMind's
 [`mmdbinspect`](https://github.com/maxmind/mmdbinspect) tool:
 `mmdbinspect -db file.mmdb 216.160.83.56`. It should work if the record
 has `country` with `iso_code` inside for `geoip_country`, `subdivisions`
-whose entries have `iso_code` for `geoip_subdivision`, or
-`autonomous_system_number` for `geoip_asn`. YMMV.
+whose entries have `iso_code` for `geoip_subdivision`,
+`autonomous_system_number` for `geoip_asn`, or `is_anonymous` and its
+siblings for `geoip_anonymous`. YMMV.
 
 ## License
 
