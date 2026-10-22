@@ -263,6 +263,10 @@ one to run wins.
   `CF-Connecting-IP`). Without it Caddy takes the left-most `X-Forwarded-For`
   entry, which a client can forge if your proxy appends to the header rather
   than replacing it.
+- Don't trust `private_ranges` when something in front of Caddy rewrites the
+  source address (Docker's userland proxy, some load balancers). Every client
+  then looks like a trusted proxy, and a forged `X-Forwarded-For` picks its
+  own location.
 
 #### Database
 - Use the Country database for country matching (it's a fraction of the size
