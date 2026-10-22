@@ -57,7 +57,8 @@ type anonFlags struct {
 	ResidentialProxy bool `maxminddb:"is_residential_proxy"`
 }
 
-// mask packs the flags into bits in anonKinds order.
+// mask packs the flags into bits in anonKinds order. The anonymous bit
+// is set whenever any other is, since it is the umbrella.
 func (f anonFlags) mask() uint8 {
 	var m uint8
 	for i, set := range [...]bool{
@@ -67,13 +68,16 @@ func (f anonFlags) mask() uint8 {
 			m |= 1 << i
 		}
 	}
+	if m != 0 {
+		m |= 1
+	}
 	return m
 }
 
-// anonNames[mask] is the placeholder text for mask: the kinds set in
-// it, comma-separated in anonKinds order, or empty for none. Built once,
-// so a flagged request does not allocate to name its kinds.
-var anonNames = func() (names [1 << len(anonKinds)]string) {
+// anonNames[mask] is the placeholder value for mask: the kinds set in
+// it, comma-separated in anonKinds order, or empty for none. Built once
+// as interface values, ready to hand to the replacer.
+var anonNames = func() (names [1 << len(anonKinds)]any) {
 	for mask := range names {
 		var parts []string
 		for i, kind := range anonKinds {
