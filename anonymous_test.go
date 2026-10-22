@@ -218,6 +218,25 @@ func TestAnonymousPlaceholder(t *testing.T) {
 	}
 }
 
+func TestAnonFlagsMask(t *testing.T) {
+	for _, tc := range []struct {
+		f    anonFlags
+		want uint8
+	}{
+		{anonFlags{}, 0},
+		{anonFlags{Anonymous: true}, 1},
+		{anonFlags{Anonymous: true, VPN: true}, 3},
+		// A file that sets a kind without the umbrella still reports both.
+		{anonFlags{VPN: true}, 3},
+		{anonFlags{Tor: true, Hosting: true}, 1 | 4 | 8},
+		{anonFlags{true, true, true, true, true, true}, 63},
+	} {
+		if got := tc.f.mask(); got != tc.want {
+			t.Errorf("%+v: mask %d, want %d", tc.f, got, tc.want)
+		}
+	}
+}
+
 func TestAnonNames(t *testing.T) {
 	for mask, want := range map[uint8]string{
 		0:  "",

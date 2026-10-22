@@ -129,7 +129,7 @@ func lookupPlace(r *http.Request, decode func(netip.Addr) (string, string, bool,
 // there: a matcher whose database has no entry for the address did
 // not match either, and should not erase what another matcher
 // resolved.
-func setPlaceholder(r *http.Request, placeholder, value string) {
+func setPlaceholder(r *http.Request, placeholder string, value any) {
 	repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if !ok {
 		return
