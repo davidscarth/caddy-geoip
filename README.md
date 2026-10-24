@@ -1,5 +1,7 @@
 # caddy-geoip
 
+[![test](https://github.com/davidscarth/caddy-geoip/actions/workflows/test.yml/badge.svg)](https://github.com/davidscarth/caddy-geoip/actions/workflows/test.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/davidscarth/caddy-geoip.svg)](https://pkg.go.dev/github.com/davidscarth/caddy-geoip) [![release](https://img.shields.io/github/v/release/davidscarth/caddy-geoip)](https://github.com/davidscarth/caddy-geoip/releases)
+
 Country, subdivision, and ASN request matchers for [Caddy](https://caddyserver.com/),
 using [MaxMind](https://www.maxmind.com/) GeoLite2/GeoIP2
 
