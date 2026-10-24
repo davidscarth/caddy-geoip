@@ -315,7 +315,7 @@ Database updates are either manually placed or
 ## Checks
 
 Built and tested against Caddy v2.11.7 and maxminddb-golang v2.8.0, with no
-other dependencies.
+other direct dependencies.
 
 The code passes:
 
