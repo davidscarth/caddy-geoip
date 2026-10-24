@@ -158,7 +158,7 @@ func (m *MatchGeoIPAnonymous) MatchWithError(r *http.Request) (bool, error) {
 	var f anonFlags
 	if ip := clientIP(r); ip.IsValid() {
 		if err := m.db.Lookup(ip).Decode(&f); err != nil {
-			return false, err
+			return false, fmt.Errorf("geoip_anonymous: %s: %w", m.DB, err)
 		}
 	}
 	mask := f.mask()

@@ -125,7 +125,7 @@ func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
 func (m *MatchGeoIPASN) asnOf(ip netip.Addr) (string, error) {
 	var n uint32
 	if err := m.db.Lookup(ip).DecodePath(&n, m.asnPath...); err != nil {
-		return "", err
+		return "", fmt.Errorf("geoip_asn: %s: %w", m.DB, err)
 	}
 	if n == 0 {
 		return "", nil

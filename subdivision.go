@@ -150,7 +150,7 @@ func (m *MatchGeoIPSubdivision) MatchWithError(r *http.Request) (bool, error) {
 func (m *MatchGeoIPSubdivision) placeOf(ip netip.Addr) (string, string, bool, error) {
 	p := place{in: m.subdivisions}
 	if err := m.db.Lookup(ip).Decode(&p); err != nil {
-		return "", "", false, err
+		return "", "", false, fmt.Errorf("geoip_subdivision: %s: %w", m.DB, err)
 	}
 	return p.country, p.subdivision, p.matched, nil
 }

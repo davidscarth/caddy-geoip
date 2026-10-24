@@ -105,8 +105,10 @@ func (m *MatchGeoIPCountry) MatchWithError(r *http.Request) (bool, error) {
 // the database has no entry for it.
 func (m *MatchGeoIPCountry) countryOf(ip netip.Addr) (string, error) {
 	var code string
-	err := m.db.Lookup(ip).DecodePath(&code, countryPath...)
-	return code, err
+	if err := m.db.Lookup(ip).DecodePath(&code, countryPath...); err != nil {
+		return "", fmt.Errorf("geoip_country: %s: %w", m.DB, err)
+	}
+	return code, nil
 }
 
 // isCountryCode reports whether s has the shape of an ISO 3166-1
