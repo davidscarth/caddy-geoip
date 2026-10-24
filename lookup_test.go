@@ -234,6 +234,8 @@ func TestLookupErrorFailsClosed(t *testing.T) {
 		got, err := tc.match(newRequest("81.2.69.142:1234"))
 		if err == nil {
 			t.Errorf("%s: expected an error from a closed database", name)
+		} else if !strings.Contains(err.Error(), "geoip_"+name) {
+			t.Errorf("%s: error does not name the matcher: %v", name, err)
 		}
 		if got {
 			t.Errorf("%s: expected no match on error", name)
