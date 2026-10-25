@@ -153,6 +153,20 @@ reads the JSON access log, such as Loki, Vector, or Elastic, can chart
 `geo_country` as a rate per country. Database updates sometimes move whole IP
 blocks between countries, which logging and monitoring can expose.
 
+If there is no block rule and you only want the placeholder for logs, give the
+matcher a code the database never emits. ISO 3166-1 reserves `ZZ` for unknown,
+so you can take advantage of that:
+
+```caddyfile
+@geo geoip_country {
+    db      "C:\Caddy\GeoLite2-Country.mmdb"
+    country ZZ
+}
+handle @geo {
+}
+log_append geo_country {geoip.country}
+```
+
 #### Restrict a state
 
 The country is required and scopes the subdivision codes,
