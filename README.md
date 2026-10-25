@@ -150,7 +150,8 @@ to log.
 The `<` matters. Without it, `log_append` records the field on the way back
 out of the route, which never happens after `abort` or when a client drops a
 download partway, so those lines would have no country. Requires Caddy 2.11 or
-later, and the `log_append` has to come after the matcher, as it does here.
+later. Keep it inside a `handle` after the matcher's, as shown here; a bare
+`log_append` at site level runs before the matcher and logs nothing.
 
 If you need an audit trail, use `respond 403` instead of `abort` in the blocked
 route. An aborted request is logged without a normal response. Any tool that
@@ -169,7 +170,9 @@ so you can take advantage of that:
 }
 handle @geo {
 }
-log_append <geo_country {geoip.country}
+handle {
+    log_append <geo_country {geoip.country}
+}
 ```
 
 #### Restrict a state
