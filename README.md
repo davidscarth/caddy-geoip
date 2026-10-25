@@ -221,14 +221,7 @@ abort @hosting
 #### Block Spamhaus ASN-DROP
 
 [ASN-DROP](https://www.spamhaus.org/drop/) is Spamhaus's list of networks
-run by spammers and cybercriminals, a few hundred ASNs, free to use. A
-third of them are registered in countries nobody geoblocks. Download it
-yourself (their terms don't allow redistribution) and point `asn_file` at
-it:
-
-```shell
-curl -sSo /etc/caddy/asndrop.json https://www.spamhaus.org/drop/asndrop.json
-```
+run by spammers and cybercriminals, a few hundred ASNs, free to use.
 
 ```caddyfile
 @asndrop geoip_asn {
@@ -241,9 +234,9 @@ abort @asndrop
 The list changes every few days, so fetch it on a schedule and `caddy reload
 --force`. It names operators, not every host that has had an abusive
 customer, so it complements `geoip_anonymous { type hosting }` rather than
-replacing it. Broader community lists such as
-[bad-asn-list](https://github.com/brianhama/bad-asn-list) (VPN providers,
-datacenters, hosting, as CSV) load the same way.
+replacing it. For a plain "no datacenter traffic" rule, X4BNet's
+[datacenter ASN list](https://github.com/X4BNet/lists_vpn/blob/main/input/datacenter/ASN.txt)
+loads the same way and does without an Anonymous IP database.
 
 #### Block anonymizers
 
