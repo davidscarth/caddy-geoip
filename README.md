@@ -77,14 +77,12 @@ geolocation matchers.
   `US-CA`), case-insensitive. Together with **country** they represent the full
   code: `country US` with `subdivision CA` is how `US-CA` is written.
 - **asn** - autonomous system numbers as plain integers, no `AS` prefix.
-- **asn_file** - path to a file of autonomous system numbers, added to any
-  `asn` list. One per line: the number first, with or without an `AS`
-  prefix, and anything after a space, tab, comma, or semicolon ignored, so
-  `14061`, `AS14061 DigitalOcean, LLC`, and CSV with a header all load.
-  Spamhaus ASN-DROP as downloaded (JSON lines) loads too. Blank lines, `#`
-  comments, and lines with no digits are skipped; anything else is an error
-  naming the line. Read when the config loads, so `caddy reload --force`
-  picks up a new file, same as the database. Placeholders are resolved.
+- **asn_file** - path to a file of autonomous system numbers, one per line,
+  added to any `asn` list. The number comes first, `AS` prefix or not, and the
+  rest of the line is ignored, so plain numbers, numbers with names, CSV, and
+  Spamhaus ASN-DROP all load as published. Blank lines, comments, and headers
+  are skipped, a bad line, a file over 64 MiB, or binary data is an error at
+  load. Placeholders are resolved.
 - **type** - kinds of anonymizer to match, any of `anonymous`, `vpn`, `tor`,
   `hosting`, `public_proxy`, `residential_proxy`. These are MaxMind's
   Anonymous IP flags (`anonymous` is the umbrella, set whenever any other is).
