@@ -132,12 +132,12 @@ directive). `log_append` adds fields to that line rather than producing one.
 
 ```caddyfile
 handle @blocked {
-    log_append geo_country {geoip.country}
-    log_append geo_blocked true
+    log_append <geo_country {geoip.country}
+    log_append <geo_blocked true
     abort
 }
 handle {
-    log_append geo_country {geoip.country}
+    log_append <geo_country {geoip.country}
 }
 ```
 
@@ -146,6 +146,11 @@ second block tags everything that passed (useful for testing to see what you
 might want to add to your blocklist). Evaluating `@blocked` sets the
 placeholder whether or not it matches, so the second block still has a country
 to log.
+
+The `<` matters. Without it, `log_append` records the field on the way back
+out of the route, which never happens after `abort` or when a client drops a
+download partway, so those lines would have no country. Requires Caddy 2.11 or
+later, and the `log_append` has to come after the matcher, as it does here.
 
 If you need an audit trail, use `respond 403` instead of `abort` in the blocked
 route. An aborted request is logged without a normal response. Any tool that
@@ -164,7 +169,7 @@ so you can take advantage of that:
 }
 handle @geo {
 }
-log_append geo_country {geoip.country}
+log_append <geo_country {geoip.country}
 ```
 
 #### Restrict a state
