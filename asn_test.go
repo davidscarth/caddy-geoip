@@ -187,6 +187,10 @@ func TestASNFile(t *testing.T) {
 `)
 	plain := write("asns.txt", "# hosting\n\n1221\n  64496  \r\n")
 	named := write("bad-asn-list.txt", "AS1221 Telstra Corporation Ltd\nas64496 Example, LLC\n64497\t# tabbed comment\n")
+	huge := write("huge.txt", "1221\n")
+	if err := os.Truncate(huge, 64<<20+1); err != nil {
+		t.Fatal(err)
+	}
 
 	for i, tc := range []struct {
 		file    string
@@ -200,6 +204,9 @@ func TestASNFile(t *testing.T) {
 		{file: plain, inline: []uint32{64497}, wantLen: 3},
 		{file: write("dup.txt", "1221\n1221\n"), inline: []uint32{1221}, wantLen: 1},
 		{file: filepath.Join(dir, "missing.txt"), wantErr: "asn_file"},
+		{file: "{env.CADDY_GEOIP_UNSET_ASN_LIST}", wantErr: "empty after placeholder"},
+		{file: asnDB, wantErr: "binary data"},
+		{file: huge, wantErr: "too large"},
 		{file: write("empty.txt", "# nothing here\n"), wantErr: "no autonomous system numbers"},
 		{file: write("meta.json", `{"type":"metadata"}`+"\n"), wantErr: "no autonomous system numbers"},
 		{file: write("list.csv", "ASN,Entity\n1442,\"Surehosting Internet Solutions, Inc.\"\n3223;Voxility\n"), wantLen: 2},

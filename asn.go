@@ -3,6 +3,7 @@
 package caddygeoip
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -99,17 +100,33 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 // object is read as Spamhaus ASN-DROP writes them, by its "asn"
 // member. Blank lines, comments, lines with no digits at all (a CSV
 // header), and JSON lines without an "asn" member (ASN-DROP's metadata
-// line) are skipped. The file must yield at least one number.
+// line) are skipped. The file must yield at least one number. It is
+// read a line at a time, so only the numbers are held in memory. An
+// empty path, a file over 64 MiB, or a line holding binary data (a
+// database given in place of a list) is refused.
 func readASNFile(path string, set map[string]struct{}) error {
 	path = caddy.NewReplacer().ReplaceAll(path, "")
-	data, err := os.ReadFile(path)
+	if path == "" {
+		return fmt.Errorf("asn_file: path is empty after placeholder replacement")
+	}
+	f, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("asn_file: %w", err)
 	}
+	defer f.Close()
+	if info, err := f.Stat(); err != nil {
+		return fmt.Errorf("asn_file: %w", err)
+	} else if info.Size() > 64<<20 {
+		return fmt.Errorf("asn_file: %s: %d bytes, too large to be a list", path, info.Size())
+	}
 	found, line := 0, 0
-	for text := range strings.Lines(string(data)) {
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
 		line++
-		text = strings.TrimSpace(text)
+		text := strings.TrimSpace(sc.Text())
+		if strings.IndexByte(text, 0) >= 0 {
+			return fmt.Errorf("asn_file: %s: binary data, not a list", path)
+		}
 		if text == "" || text[0] == '#' {
 			continue
 		}
@@ -145,6 +162,9 @@ func readASNFile(path string, set map[string]struct{}) error {
 		}
 		set[strconv.FormatUint(n, 10)] = struct{}{}
 		found++
+	}
+	if err := sc.Err(); err != nil {
+		return fmt.Errorf("asn_file: %s: %w", path, err)
 	}
 	if found == 0 {
 		return fmt.Errorf("asn_file: %s: no autonomous system numbers found", path)
