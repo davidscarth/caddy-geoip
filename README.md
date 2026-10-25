@@ -48,8 +48,9 @@ Requires Go 1.26.0 or later to build.
 }
 
 @name geoip_asn {
-    db  <path>
-    asn <numbers...>
+    db       <path>
+    asn      <numbers...>
+    asn_file <path>
     match_unknown
 }
 
@@ -60,9 +61,9 @@ Requires Go 1.26.0 or later to build.
 ```
 
 `db` is required on every matcher, along with at least one `country`,
-`subdivision`, `asn`, or `type`. `geoip_subdivision` also requires `country`,
-which scopes the codes. `match_unknown` is optional on the geolocation
-matchers.
+`subdivision`, `asn` (or an `asn_file`), or `type`. `geoip_subdivision` also
+requires `country`, which scopes the codes. `match_unknown` is optional on the
+geolocation matchers.
 
 - **db** - path to a Country, City, or Enterprise database for `geoip_country`,
   a City or Enterprise database for `geoip_subdivision`, or an ASN, ISP, or
@@ -76,6 +77,14 @@ matchers.
   `US-CA`), case-insensitive. Together with **country** they represent the full
   code: `country US` with `subdivision CA` is how `US-CA` is written.
 - **asn** - autonomous system numbers as plain integers, no `AS` prefix.
+- **asn_file** - path to a file of autonomous system numbers, added to any
+  `asn` list. One per line: the number first, with or without an `AS`
+  prefix, and anything after a space, tab, comma, or semicolon ignored, so
+  `14061`, `AS14061 DigitalOcean, LLC`, and CSV with a header all load.
+  Spamhaus ASN-DROP as downloaded (JSON lines) loads too. Blank lines, `#`
+  comments, and lines with no digits are skipped; anything else is an error
+  naming the line. Read when the config loads, so `caddy reload --force`
+  picks up a new file, same as the database. Placeholders are resolved.
 - **type** - kinds of anonymizer to match, any of `anonymous`, `vpn`, `tor`,
   `hosting`, `public_proxy`, `residential_proxy`. These are MaxMind's
   Anonymous IP flags (`anonymous` is the umbrella, set whenever any other is).
@@ -208,6 +217,33 @@ Regardless of country:
 }
 abort @hosting
 ```
+
+#### Block Spamhaus ASN-DROP
+
+[ASN-DROP](https://www.spamhaus.org/drop/) is Spamhaus's list of networks
+run by spammers and cybercriminals, a few hundred ASNs, free to use. A
+third of them are registered in countries nobody geoblocks. Download it
+yourself (their terms don't allow redistribution) and point `asn_file` at
+it:
+
+```shell
+curl -sSo /etc/caddy/asndrop.json https://www.spamhaus.org/drop/asndrop.json
+```
+
+```caddyfile
+@asndrop geoip_asn {
+    db       /usr/share/GeoIP/GeoLite2-ASN.mmdb
+    asn_file /etc/caddy/asndrop.json
+}
+abort @asndrop
+```
+
+The list changes every few days, so fetch it on a schedule and `caddy reload
+--force`. It names operators, not every host that has had an abusive
+customer, so it complements `geoip_anonymous { type hosting }` rather than
+replacing it. Broader community lists such as
+[bad-asn-list](https://github.com/brianhama/bad-asn-list) (VPN providers,
+datacenters, hosting, as CSV) load the same way.
 
 #### Block anonymizers
 
@@ -357,7 +393,8 @@ one to run wins.
   },
   "geoip_asn": {
     "db": "/usr/share/GeoIP/GeoLite2-ASN.mmdb",
-    "asns": [16509]
+    "asns": [16509],
+    "asn_file": "/etc/caddy/asndrop.json"
   },
   "geoip_anonymous": {
     "db": "/usr/share/GeoIP/GeoIP2-Anonymous-IP.mmdb",
