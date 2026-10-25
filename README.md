@@ -218,10 +218,12 @@ Regardless of country:
 abort @hosting
 ```
 
-#### Block Spamhaus ASN-DROP
+#### Block networks from a list
 
-[ASN-DROP](https://www.spamhaus.org/drop/) is Spamhaus's list of networks
-run by spammers and cybercriminals, a few hundred ASNs, free to use.
+`asn_file` takes any list of autonomous system numbers, one per line, as
+published. This example uses [ASN-DROP](https://www.spamhaus.org/drop/),
+Spamhaus's list of networks run by spammers and cybercriminals, a few
+hundred ASNs, free to use:
 
 ```caddyfile
 @asndrop geoip_asn {
@@ -236,7 +238,7 @@ The list changes every few days, so fetch it on a schedule and `caddy reload
 customer, so it complements `geoip_anonymous { type hosting }` rather than
 replacing it. For a plain "no datacenter traffic" rule, X4BNet's
 [datacenter ASN list](https://github.com/X4BNet/lists_vpn/blob/main/input/datacenter/ASN.txt)
-loads the same way and does without an Anonymous IP database.
+loads the same way and doesn't need an Anonymous IP database.
 
 #### Block anonymizers
 
