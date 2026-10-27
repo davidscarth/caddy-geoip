@@ -2,8 +2,9 @@
 
 [![Tests](https://github.com/davidscarth/caddy-geoip/actions/workflows/test.yml/badge.svg)](https://github.com/davidscarth/caddy-geoip/actions/workflows/test.yml) [![CodeQL](https://github.com/davidscarth/caddy-geoip/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/davidscarth/caddy-geoip/actions/workflows/github-code-scanning/codeql) [![Go Reference](https://pkg.go.dev/badge/github.com/davidscarth/caddy-geoip.svg)](https://pkg.go.dev/github.com/davidscarth/caddy-geoip) [![release](https://img.shields.io/github/v/release/davidscarth/caddy-geoip)](https://github.com/davidscarth/caddy-geoip/releases)
 
-Country, subdivision, and ASN request matchers for [Caddy](https://caddyserver.com/),
-using [MaxMind](https://www.maxmind.com/) GeoLite2/GeoIP2
+Country, subdivision, ASN, and anonymizer request matchers for
+[Caddy](https://caddyserver.com/), using
+[MaxMind](https://www.maxmind.com/) GeoLite2/GeoIP2
 
 ## Why
 
@@ -12,9 +13,9 @@ like the options available for one reason or another, so I made this.
 These are the rules it follows:
 
 1. **The matcher just matches.** It tests whether the IP is in the country,
-   subdivision, or ASN list. That's it. You decide what happens to it...
-   `geoip_country { country RU CN }` plus Caddy's `abort` is a deny list, and
-   `not` on the matcher makes it an allow list.
+   subdivision, ASN, or anonymizer list. That's it. You decide what happens
+   to it... `geoip_country { country RU CN }` plus Caddy's `abort` is a deny
+   list, and `not` on the matcher makes it an allow list.
 2. **Defer to Caddy.** Blocking, responding, redirecting, negating, combining
    conditions, exempting the LAN, logging... Caddy already does all of these.
    Don't duplicate something Caddy already does well.
@@ -134,8 +135,8 @@ would be blocked; exempt it with Caddy's `client_ip private_ranges`:
 abort @outside
 ```
 
-(`match_unknown` on the matcher is the blunter alternative: it lets every
-unknown IP through, not just the LAN.)
+We avoid `match_unknown` in the example above because it makes the allow
+list fail open. `client_ip private_ranges` here exempts only the LAN.
 
 #### Friendlier responses
 
