@@ -222,9 +222,11 @@ abort @asndrop
 The list changes every few days, so fetch it on a schedule and `caddy reload
 --force`. It names operators, not every host that has had an abusive
 customer, so it complements `geoip_anonymous { type hosting }` rather than
-replacing it. For a plain "no datacenter traffic" rule, X4BNet's
-[datacenter ASN list](https://github.com/X4BNet/lists_vpn/blob/main/input/datacenter/ASN.txt)
-loads the same way and doesn't need an Anonymous IP database.
+replacing it. For a plain "no datacenter traffic" rule, X4BNet's datacenter
+ASN list loads the same way and doesn't need an Anonymous IP database.
+
+Some useful ASN lists have been tested, with notes on what each one does,
+in [docs/sources.md](docs/sources.md#lists-for-asn_file).
 
 #### Block anonymizers
 
