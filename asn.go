@@ -123,9 +123,9 @@ func readASNFile(path string, set map[string]struct{}) error {
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line++
-		text := strings.TrimSpace(sc.Text())
+		text := strings.TrimSpace(strings.TrimPrefix(sc.Text(), "\ufeff")) // Windows editors write a byte order mark
 		if strings.IndexByte(text, 0) >= 0 {
-			return fmt.Errorf("asn_file: %s: binary data, not a list", path)
+			return fmt.Errorf("asn_file: %s: binary data or UTF-16, not a UTF-8 list", path)
 		}
 		if text == "" || text[0] == '#' {
 			continue

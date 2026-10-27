@@ -218,6 +218,8 @@ func TestASNFile(t *testing.T) {
 		{file: write("big.txt", "4294967296\n"), wantErr: "big.txt:1"},
 		{file: write("badjson.json", "{\"asn\":\n"), wantErr: "badjson.json:1"},
 		{file: write("bigjson.json", `{"asn":4294967296}`+"\n"), wantErr: "bigjson.json:1"},
+		{file: write("bom.txt", "\ufeff1221\n64496\n"), wantLen: 2},
+		{file: write("utf16.txt", "\xff\xfe1\x002\x002\x001\x00\r\x00\n\x00"), wantErr: "UTF-16"},
 	} {
 		m := MatchGeoIPASN{DB: asnDB, ASNs: tc.inline, ASNFile: tc.file}
 		err := m.Provision(caddy.Context{})
