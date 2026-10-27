@@ -143,15 +143,11 @@ handle {
 
 The lines inside `handle @blocked` tag denied requests with their country, the
 second block tags everything that passed (useful for testing to see what you
-might want to add to your blocklist). Evaluating `@blocked` sets the
-placeholder whether or not it matches, so the second block still has a country
-to log.
-
-The `<` matters. Without it, `log_append` records the field on the way back
-out of the route, which never happens after `abort` or when a client drops a
-download partway, so those lines would have no country. Requires Caddy 2.11 or
-later. Keep it inside a `handle` after the matcher's, as shown here; a bare
-`log_append` at site level runs before the matcher and logs nothing.
+might want to add to your blocklist). The `<` matters. Without it,
+`log_append` records the field on the way back out of the route, which never
+happens after `abort` or when a client drops a download. Evaluating `@blocked`
+sets the placeholder whether or not it matches, so the second block still has
+a country to log (and keep it inside a `handle` so it runs after the matcher).
 
 If you need an audit trail, use `respond 403` instead of `abort` in the blocked
 route. An aborted request is logged without a normal response. Any tool that
@@ -374,9 +370,7 @@ of them are supported, and results may change with any update on their side.
   3166-2 codes (in their MMDB, not in their CSV, so don't convert it
   yourself).
 - Geoacumen [Country](https://github.com/geoacumen/geoacumen-country)
-  (Apache-2.0): works. Private and reserved ranges carry the literal code
-  `None` rather than no record, so `match_unknown` does not cover them. Exempt
-  the LAN with `client_ip private_ranges` as usual.
+  (Apache-2.0): works as of 10/26/2026.
 - sapics [origin-asn IPv4+IPv6](https://github.com/sapics/ip-location-db#asn)
   (PDDL): works with `geoip_asn`. Built from BGP routing data, updated daily.
 
