@@ -14,13 +14,13 @@ matches, but evaluating it sets `{geoip.country}` for everything after it:
 
 ```caddyfile
 @geo geoip_country {
-    db      "C:\Caddy\GeoLite2-Country.mmdb"
-    country ZZ
+	db "C:\ProgramData\Caddy\GeoLite2-Country.mmdb"
+	country ZZ
 }
 handle @geo {
 }
 handle {
-    log_append <geo_country {geoip.country}
+	log_append <geo_country {geoip.country}
 }
 ```
 
@@ -37,8 +37,8 @@ replaces the field:
 handle @geo {
 }
 handle {
-    request_header X-Country-Code {geoip.country}
-    reverse_proxy 127.0.0.1:3000
+	request_header X-Country-Code {geoip.country}
+	reverse_proxy 127.0.0.1:3000
 }
 ```
 
@@ -49,16 +49,16 @@ be used the same way.
 #### Fence a path
 
 In this example the site is open, but the admin panel is gated by region
-or LAN.
+or LAN. `/admin/*` doesn't match `/admin` itself, so list both.
 
 ```caddyfile
 @admin_abroad {
-    path /admin/*
-    not geoip_country {
-        db      "C:\Caddy\GeoLite2-Country.mmdb"
-        country US
-    }
-    not client_ip private_ranges
+	path /admin /admin/*
+	not geoip_country {
+		db "C:\ProgramData\Caddy\GeoLite2-Country.mmdb"
+		country US
+	}
+	not client_ip private_ranges
 }
 abort @admin_abroad
 ```
@@ -70,13 +70,13 @@ Sevastopol, Donetsk, and Luhansk are subdivisions of `UA` in the database:
 
 ```caddyfile
 @sanctioned_country geoip_country {
-    db      "C:\Caddy\GeoLite2-City.mmdb"
-    country CU IR KP SY
+	db "C:\ProgramData\Caddy\GeoLite2-City.mmdb"
+	country CU IR KP SY
 }
 @sanctioned_region geoip_subdivision {
-    db          "C:\Caddy\GeoLite2-City.mmdb"
-    country     UA
-    subdivision 43 40 14 09
+	db "C:\ProgramData\Caddy\GeoLite2-City.mmdb"
+	country UA
+	subdivision 43 40 14 09
 }
 respond @sanctioned_country "Not available in your region" 451
 respond @sanctioned_region "Not available in your region" 451
@@ -99,22 +99,29 @@ zone, named matchers are not available there:
 
 ```caddyfile
 rate_limit {
-    zone hosting {
-        match {
-            geoip_asn {
-                db       "C:\Caddy\GeoLite2-ASN.mmdb"
-                asn_file "C:\Caddy\datacenter-asns.txt"
-            }
-        }
-        key    {client_ip}
-        events 30
-        window 1m
-    }
+	zone hosting {
+		match {
+			geoip_asn {
+				db "C:\ProgramData\Caddy\GeoLite2-ASN.mmdb"
+				asn_file "C:\ProgramData\Caddy\datacenter-asns.txt"
+			}
+		}
+		key {client_ip}
+		events 30
+		window 1m
+	}
 }
 ```
 
 If you subscribe to the paid MaxMind Anonymous IP database, you can use
 `geoip_anonymous { type hosting }` in place of the ASN matcher.
+
+To cap a whole provider rather than each of its addresses, use
+`key {geoip.asn}`. The zone's matcher has run by the time the key is read.
+
+Inside another plugin's directive, our rule 3 ("fail closed") no longer holds.
+caddy-ratelimit treats a matcher error as no match, so a failed lookup, or a
+refused HTTP/3 0-RTT request, skips the zone instead of stopping the request.
 
 #### VPNs, but only from some countries
 
@@ -123,14 +130,14 @@ reached:
 
 ```caddyfile
 @vpn_abroad {
-    geoip_anonymous {
-        db   "C:\Caddy\GeoIP2-Anonymous-IP.mmdb"
-        type vpn
-    }
-    not geoip_country {
-        db      "C:\Caddy\GeoLite2-Country.mmdb"
-        country US CA
-    }
+	geoip_anonymous {
+		db "C:\ProgramData\Caddy\GeoIP2-Anonymous-IP.mmdb"
+		type vpn
+	}
+	not geoip_country {
+		db "C:\ProgramData\Caddy\GeoLite2-Country.mmdb"
+		country US CA
+	}
 }
 respond @vpn_abroad "VPN access is limited to North America" 403
 ```
@@ -139,30 +146,31 @@ respond @vpn_abroad "VPN access is limited to North America" 403
 
 ```caddyfile
 @eu geoip_country {
-    db      /usr/share/GeoIP/GeoLite2-Country.mmdb
-    country AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE
+	db /usr/share/GeoIP/GeoLite2-Country.mmdb
+	country AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE
 }
 reverse_proxy @eu eu-backend:8080
 reverse_proxy backend:8080
 ```
 
 The example list is the [EU][eu]. GDPR territory is the [EEA][eea], which
-adds `IS LI NO`.
+adds `IS LI NO`. The UK applies its own UK GDPR, so add `GB` too where
+GDPR-style rules apply.
 
 #### Reusable snippet
 
 ```caddyfile
 (geoblock) {
-    @blocked geoip_country {
-        db      "C:\Caddy\GeoLite2-Country.mmdb"
-        country CN RU PK KP IR ID IN VN BR NG BY CU SY VE SD
-    }
-    abort @blocked
+	@blocked geoip_country {
+		db "C:\ProgramData\Caddy\GeoLite2-Country.mmdb"
+		country CN RU PK KP IR ID IN VN BR NG BY CU SY VE SD
+	}
+	abort @blocked
 }
 
 example.com {
-    import geoblock
-    reverse_proxy 127.0.0.1:3000
+	import geoblock
+	reverse_proxy 127.0.0.1:3000
 }
 ```
 

@@ -127,7 +127,7 @@ source can do instead:
 | `hosting` | X4BNet [datacenter ASNs][x4b-dc], brianhama or bountyyfi [bad-asn-list][bah] | `geoip_asn` + `asn_file` | good, hosting is a property of the network, so ASN is the natural key |
 | `vpn` | X4BNet [VPN ASNs][x4b-vpn] | `geoip_asn` + `asn_file` | thin, 16 providers that run their own network. Most VPN exits sit in hosting space, so the hosting list catches them, along with every other hosting customer |
 | `public_proxy` | IP2Location [IP2Proxy LITE][ip2proxy], MMDB | `geoip_anonymous` with `type anonymous` | good, it is an open-proxy list in the same record layout |
-| `anonymous` | the two rows above together | both matchers | partial, umbrella minus Tor and residential |
+| `anonymous` | the three rows above together | both matchers | partial, umbrella minus Tor and residential |
 | `tor` | Tor Project [exit list][torbulk] | **not in this plugin.** Exits are addresses, not networks, so an IP source, CrowdSec's Tor blocklist, or the firewall | good, the list is authoritative and hourly |
 | `residential_proxy` | none | none | by design these are addresses on consumer ISPs, only commercial data (MaxMind, Spur, IPQS) sees them |
 
