@@ -4,6 +4,15 @@ The README.md was getting a little long, so the more fundamental use cases
 were kept in the README and this supplement is designed to feature additional
 examples where the plugin can help Caddy do more.
 
+- [Look up without a rule](#look-up-without-a-rule)
+- [Pass the country to your app](#pass-the-country-to-your-app)
+- [Fence a path](#fence-a-path)
+- [Sanctioned countries and regions](#sanctioned-countries-and-regions)
+- [Rate limit instead of block](#rate-limit-instead-of-block)
+- [VPNs, but only from some countries](#vpns-but-only-from-some-countries)
+- [Route by region](#route-by-region)
+- [Reusable snippet](#reusable-snippet)
+
 #### Look up without a rule
 
 A matcher only runs when a directive uses it, and the placeholder is only
