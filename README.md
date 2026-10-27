@@ -366,8 +366,8 @@ The code passes:
 - `govulncheck ./...` with no reachable vulnerabilities
 - CodeQL via GitHub code scanning
 
-Tested against MaxMind's official test databases, every edition listed in
-[docs/sources.md](docs/sources.md), and running in production with the
+Tested against MaxMind's official test databases (each listed in
+[docs/sources.md](docs/sources.md)), and running in production with the
 free GeoLite2 editions.
 
 ## Other data sources
