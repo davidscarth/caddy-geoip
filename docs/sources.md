@@ -129,7 +129,7 @@ source can do instead:
 | `public_proxy` | IP2Location [IP2Proxy LITE][ip2proxy], MMDB | `geoip_anonymous` with `type anonymous` | good, it is an open-proxy list in the same record layout |
 | `anonymous` | the three rows above together | both matchers | partial, umbrella minus Tor and residential |
 | `tor` | Tor Project [exit list][torbulk] | **not in this plugin.** Exits are addresses, not networks, so an IP source, CrowdSec's Tor blocklist, or the firewall | good, the list is authoritative and hourly |
-| `residential_proxy` | none | none | by design these are addresses on consumer ISPs, only commercial data (MaxMind, Spur, IPQS) sees them |
+| `residential_proxy` | none | none | by design these are addresses on consumer ISPs, only commercial data such as MaxMind's sees them |
 
 [dbip-country]: https://db-ip.com/db/download/ip-to-country-lite
 [dbip-asn]: https://db-ip.com/db/download/ip-to-asn-lite
