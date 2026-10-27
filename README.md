@@ -7,9 +7,9 @@ using [MaxMind](https://www.maxmind.com/) GeoLite2/GeoIP2
 
 ## Why
 
-I wanted a simple GeoIP matcher that was small, fast, and secure. I didn't like
-the options available for one reason or another, so I made this. These are the rules
-it follows:
+I wanted a simple GeoIP matcher that was small, fast, and safe. I didn't
+like the options available for one reason or another, so I made this.
+These are the rules it follows:
 
 1. **The matcher just matches.** It tests whether the IP is in the country,
    subdivision, or ASN list. That's it. You decide what happens to it...
