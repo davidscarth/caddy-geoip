@@ -258,10 +258,12 @@ Two separate `abort` lines are both denies and combine as OR in any order.
 An exception must be written inside one matcher, as above, because nothing
 can un-abort a request.
 
-More examples in [docs/recipes.md](docs/recipes.md): a lookup with no rule,
+#### More examples
+
+Check [docs/recipes.md](docs/recipes.md) for more: a lookup with no rule,
 pass the country to your app, fence a path, sanctioned countries and
 regions, rate limit instead of block, VPNs only from some countries, route
-by region, a snippet to import.
+by region, and a snippet to import.
 
 ## Placeholders
 
@@ -364,10 +366,9 @@ The code passes:
 - `govulncheck ./...` with no reachable vulnerabilities
 - CodeQL via GitHub code scanning
 
-Tested against MaxMind's `GeoLite2-Country`, `GeoIP2-Country`, `GeoLite2-City`,
-`GeoIP2-City`, `GeoLite2-ASN`, `GeoIP2-ISP`, `GeoIP2-Enterprise`,
-`GeoIP2-Anonymous-IP`, `GeoIP-Anonymous-Plus`, and `GeoIP2-IP-Risk` test
-databases, and running in production with the free GeoLite2 editions.
+Tested against MaxMind's official test databases, every edition listed in
+[docs/sources.md](docs/sources.md), and running in production with the
+free GeoLite2 editions.
 
 ## Other data sources
 
