@@ -35,28 +35,28 @@ Requires Go 1.26.0 or later to build.
 
 ```caddyfile
 @name geoip_country {
-    db      <path>
-    country <codes...>
-    match_unknown
+	db <path>
+	country <codes...>
+	match_unknown
 }
 
 @name geoip_subdivision {
-    db          <path>
-    country     <code>
-    subdivision <codes...>
-    match_unknown
+	db <path>
+	country <code>
+	subdivision <codes...>
+	match_unknown
 }
 
 @name geoip_asn {
-    db       <path>
-    asn      <numbers...>
-    asn_file <path>
-    match_unknown
+	db <path>
+	asn <numbers...>
+	asn_file <path>
+	match_unknown
 }
 
 @name geoip_anonymous {
-    db   <path>
-    type <kinds...>
+	db <path>
+	type <kinds...>
 }
 ```
 
@@ -98,14 +98,17 @@ geolocation matchers.
 
 ## Examples
 
+The first few examples use Windows paths, which need quotes. The rest use
+`geoipupdate`'s default Linux directory. Either style works anywhere.
+
 #### Deny list
 
 Drop the connection for these countries:
 
 ```caddyfile
 @blocked geoip_country {
-    db      "C:\Caddy\GeoLite2-Country.mmdb"
-    country CN RU PK KP IR ID IN VN BR NG BY CU SY VE SD
+	db "C:\ProgramData\Caddy\GeoLite2-Country.mmdb"
+	country CN RU PK KP IR ID IN VN BR NG BY CU SY VE SD
 }
 abort @blocked
 ```
@@ -122,11 +125,11 @@ would be blocked; exempt it with Caddy's `client_ip private_ranges`:
 
 ```caddyfile
 @outside {
-    not geoip_country {
-        db      "C:\Caddy\GeoLite2-Country.mmdb"
-        country US CA GB FR DE IT ES AR AU JP
-    }
-    not client_ip private_ranges
+	not geoip_country {
+		db "C:\ProgramData\Caddy\GeoLite2-Country.mmdb"
+		country US CA GB FR DE IT ES AR AU JP
+	}
+	not client_ip private_ranges
 }
 abort @outside
 ```
@@ -151,12 +154,12 @@ directive). `log_append` adds fields to that line rather than producing one.
 
 ```caddyfile
 handle @blocked {
-    log_append <geo_country {geoip.country}
-    log_append <geo_blocked true
-    abort
+	log_append <geo_country {geoip.country}
+	log_append <geo_blocked true
+	abort
 }
 handle {
-    log_append <geo_country {geoip.country}
+	log_append <geo_country {geoip.country}
 }
 ```
 
@@ -174,22 +177,6 @@ reads the JSON access log, such as Loki, Vector, or Elastic, can chart
 `geo_country` as a rate per country. Database updates sometimes move whole IP
 blocks between countries, which logging and monitoring can expose.
 
-If there is no block rule and you only want the placeholder for logs, give the
-matcher a code the database never emits. ISO 3166-1 reserves `ZZ` for unknown,
-so you can take advantage of that:
-
-```caddyfile
-@geo geoip_country {
-    db      "C:\Caddy\GeoLite2-Country.mmdb"
-    country ZZ
-}
-handle @geo {
-}
-handle {
-    log_append <geo_country {geoip.country}
-}
-```
-
 #### Restrict a state
 
 The country is required and scopes the subdivision codes,
@@ -197,9 +184,9 @@ which are only unique within a country:
 
 ```caddyfile
 @restricted geoip_subdivision {
-    db          "C:\Caddy\GeoLite2-City.mmdb"
-    country     US
-    subdivision UT LA MS
+	db "C:\ProgramData\Caddy\GeoLite2-City.mmdb"
+	country US
+	subdivision UT LA MS
 }
 respond @restricted "Not available in your state" 451
 ```
@@ -210,8 +197,8 @@ Regardless of country:
 
 ```caddyfile
 @hosting geoip_asn {
-    db  "C:\Caddy\GeoLite2-ASN.mmdb"
-    asn 16509 14618 14061 24940 16276
+	db /usr/share/GeoIP/GeoLite2-ASN.mmdb
+	asn 16509 14618 14061 24940 16276
 }
 abort @hosting
 ```
@@ -225,8 +212,8 @@ hundred ASNs, free to use:
 
 ```caddyfile
 @asndrop geoip_asn {
-    db       /usr/share/GeoIP/GeoLite2-ASN.mmdb
-    asn_file /etc/caddy/asndrop.json
+	db /usr/share/GeoIP/GeoLite2-ASN.mmdb
+	asn_file /etc/caddy/asndrop.json
 }
 abort @asndrop
 ```
@@ -242,27 +229,10 @@ loads the same way and doesn't need an Anonymous IP database.
 
 ```caddyfile
 @anon geoip_anonymous {
-    db   "C:\Caddy\GeoIP2-Anonymous-IP.mmdb"
-    type vpn tor public_proxy
+	db /usr/share/GeoIP/GeoIP2-Anonymous-IP.mmdb
+	type vpn tor public_proxy
 }
 abort @anon
-```
-
-Or let identified VPNs through, but only from where the site is meant to be
-reached:
-
-```caddyfile
-@vpn_abroad {
-    geoip_anonymous {
-        db   "Anonymous.mmdb"
-        type vpn
-    }
-    not geoip_country {
-        db      "Country.mmdb"
-        country US CA
-    }
-}
-respond @vpn_abroad "VPN access is limited to North America" 403
 ```
 
 #### Combine
@@ -272,14 +242,14 @@ this network" is a single condition rather than two rules that need ordering:
 
 ```caddyfile
 @blocked {
-    geoip_country {
-        db "Country.mmdb"
-        country RU
-    }
-    not geoip_asn {
-        db "ASN.mmdb"
-        asn 64496
-    }
+	geoip_country {
+		db /usr/share/GeoIP/GeoLite2-Country.mmdb
+		country RU
+	}
+	not geoip_asn {
+		db /usr/share/GeoIP/GeoLite2-ASN.mmdb
+		asn 64496
+	}
 }
 abort @blocked
 ```
@@ -288,33 +258,10 @@ Two separate `abort` lines are both denies and combine as OR in any order.
 An exception must be written inside one matcher, as above, because nothing
 can un-abort a request.
 
-#### Route by region
-
-```caddyfile
-@eu geoip_country {
-    db      /usr/share/GeoIP/GeoLite2-Country.mmdb
-    country AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE
-}
-reverse_proxy @eu eu-backend:8080
-reverse_proxy backend:8080
-```
-
-#### Reusable snippet
-
-```caddyfile
-(geoblock) {
-    @blocked geoip_country {
-        db      "C:\Caddy\GeoLite2-Country.mmdb"
-        country CN RU PK KP IR ID IN VN BR NG BY CU SY VE SD
-    }
-    abort @blocked
-}
-
-example.com {
-    import geoblock
-    reverse_proxy 127.0.0.1:3000
-}
-```
+More examples in [docs/recipes.md](docs/recipes.md): a lookup with no rule,
+pass the country to your app, fence a path, sanctioned countries and
+regions, rate limit instead of block, VPNs only from some countries, route
+by region, a snippet to import.
 
 ## Placeholders
 
@@ -422,61 +369,18 @@ Tested against MaxMind's `GeoLite2-Country`, `GeoIP2-Country`, `GeoLite2-City`,
 `GeoIP2-Anonymous-IP`, `GeoIP-Anonymous-Plus`, and `GeoIP2-IP-Risk` test
 databases, and running in production with the free GeoLite2 editions.
 
-## Other vendors
+## Other data sources
 
-The matchers read MaxMind's GeoIP2 record layout: `country.iso_code`,
+Any MMDB file works if it also uses MaxMind's schema, regardless of who made
+it. The format defines the container but not the fields inside, and those
+names inside are the part that matters. The matchers read `country.iso_code`,
 `subdivisions[].iso_code`, `autonomous_system_number`, and the `is_*`
-anonymizer flags. A file that uses that layout will work regardless of who
-built it. A file that doesn't will still load, since the type check only
-looks at the database name, but then it won't work. Below were checked with
-October 2026 files. None of them are supported, and results may change with
-any update on their side.
+anonymizer flags (GeoLite2/GeoIP2 style). A file with different names still
+loads, since the type check only looks at the database name, but it won't work
+right (every address is unknown). `asn_file` takes any published ASN list.
 
-#### Tested, seems working
-
-- DB-IP Lite [Country](https://db-ip.com/db/download/ip-to-country-lite)
-  and [ASN](https://db-ip.com/db/download/ip-to-asn-lite) (CC BY 4.0): drop-in
-  replacements for GeoLite2.
-- IP2Location LITE
-  [Country (DB1)](https://lite.ip2location.com/database/db1-ip-country)
-  (CC BY-SA 4.0),
-  [City (DB11)](https://lite.ip2location.com/database/db11-ip-country-region-city-latitude-longitude-zipcode-timezone)
-  and [ASN](https://lite.ip2location.com/database-asn)
-  ([Proprietary](https://lite.ip2location.com/terms-of-use)): all three
-  work as drop-in replacements, in MMDB format. Their City DB carries ISO
-  3166-2 codes (in their MMDB, not in their CSV, so don't convert it
-  yourself).
-- IP2Location [IP2Proxy LITE PX10](https://lite.ip2location.com/ip2proxy-lite)
-  in MMDB format ([Proprietary](https://lite.ip2location.com/terms-of-use)):
-  works with `geoip_anonymous`. The LITE edition lists public proxies only,
-  so every address carries the same two flags, `anonymous` and
-  `public_proxy`. Others such as `type vpn` or `type tor` match nothing. Use
-  `type anonymous` as a block-all-known-proxies switch.
-- Geoacumen [Country](https://github.com/geoacumen/geoacumen-country)
-  (Apache-2.0): works as of 10/26/2026.
-- sapics [origin-asn IPv4+IPv6](https://github.com/sapics/ip-location-db#asn)
-  (PDDL): works with `geoip_asn`. Built from BGP routing data, updated daily.
-
-#### Tested, not working
-
-- DB-IP Lite City: subdivision names are without ISO 3166-2 codes, so
-  `geoip_subdivision` matches nothing and `{geoip.subdivision}` is always
-  empty. **Do not use the DB-IP City database.**
-- IPLocate.io free databases: own record layout (`country_code`, `asn` as
-  text). Both files load and every address is unknown. **Do not use the
-  IPLocate databases.**
-- sapics `user-country` and `server-country`: own record layout
-  (`country_code`), so `geoip_country` loads them and every address is
-  unknown. Their ASN file above is the exception. **Do not use the sapics
-  country databases.**
-
-To check a file not listed here, use MaxMind's
-[`mmdbinspect`](https://github.com/maxmind/mmdbinspect) tool:
-`mmdbinspect -db file.mmdb 216.160.83.56`. It should work if the record
-has `country` with `iso_code` inside for `geoip_country`, `subdivisions`
-whose entries have `iso_code` for `geoip_subdivision`,
-`autonomous_system_number` for `geoip_asn`, or `is_anonymous` and its
-siblings for `geoip_anonymous`. YMMV.
+See [docs/sources.md](docs/sources.md) for what's been tested, what each list
+stands in for, and free substitutes.
 
 ## License
 
