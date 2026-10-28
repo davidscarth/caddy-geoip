@@ -12,14 +12,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Latest stable Go, stdlib vulnerabilities are fixed by
       # the building toolchain, and govulncheck reports them
       # against whatever built the binary.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
+          check-latest: true
 
       - name: go mod tidy leaves no changes
         run: go mod tidy && git diff --exit-code go.mod go.sum
