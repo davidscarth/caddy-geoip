@@ -84,7 +84,7 @@ All MMDB format, checked with October 2026 files.
    X4BNet's datacenter and VPN lists, in MaxMind's record layout,
    rebuilt daily. `type tor`, `hosting`, `vpn`, and `anonymous` work,
    `public_proxy` and `residential_proxy` are never set. New, and may
-   change or go away.
+   change or go away. See that project [README][anonlists] for details.
 
 #### Checking a file yourself
 
@@ -127,8 +127,8 @@ These were checked in October 2026, counts are distinct ASNs at that time.
 
 MaxMind's Anonymous IP database is paid. The experimental
 [anonymous-lists][anonlists] file carries `tor`, `hosting`, and `vpn` in
-one MMDB, built from the Tor Project and X4BNet lists below. For each
-`type`, what a free source can do instead:
+one MMDB, built from the Tor Project exit lists and X4BNet's datacenter
+and VPN lists. For each `type`, what a free source can do instead:
 
 | `type` | Free substitute | Where | Coverage |
 |---|---|---|---|
