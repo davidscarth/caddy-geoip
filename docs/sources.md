@@ -62,9 +62,9 @@ looks at the database name, but then it won't work.
 | IP2Location LITE [DB11][ip2l-db11] | CC BY-SA 4.0 | `geoip_subdivision` | yes | MMDB only, see 2 |
 | IP2Location LITE [ASN][ip2l-asn] | [proprietary][ip2l-terms] | `geoip_asn` | yes | |
 | IP2Location [IP2Proxy LITE PX10][ip2proxy] | [proprietary][ip2l-terms] | `geoip_anonymous` | yes | public proxies only, see 3 |
-| Geoacumen [Country][geoacumen] | Apache-2.0 | `geoip_country` | yes | |
-| sapics user-country, server-country | PDDL | `geoip_country` | **no** | own schema, see 4 |
-| sapics [origin-asn][sapics-asn] | PDDL | `geoip_asn` | yes | from BGP, daily |
+| Geoacumen [Country][geoacumen] | Apache-2.0 | `geoip_country` | yes | as of Oct 26 2026 |
+| sapics [user-country, server-country][sapics-country] | PDDL | `geoip_country` | yes | as of Oct 28 2026 |
+| sapics [origin-asn][sapics-asn] | PDDL | `geoip_asn` | yes | |
 | IPLocate.io free databases | CC BY-SA 4.0 | any | **no** | own schema, see 4 |
 | [anonymous-lists][anonlists] | CC0, MIT | `geoip_anonymous` | yes | experimental, see 5 |
 
@@ -147,6 +147,7 @@ and VPN lists. For each `type`, what a free source can do instead:
 [ip2l-terms]: https://lite.ip2location.com/terms-of-use
 [ip2proxy]: https://lite.ip2location.com/ip2proxy-lite
 [geoacumen]: https://github.com/geoacumen/geoacumen-country
+[sapics-country]: https://github.com/sapics/ip-location-db#country
 [sapics-asn]: https://github.com/sapics/ip-location-db#asn
 [asndrop]: https://www.spamhaus.org/drop/
 [x4b-dc]: https://github.com/X4BNet/lists_vpn/blob/main/input/datacenter/ASN.txt
