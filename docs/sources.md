@@ -66,6 +66,7 @@ looks at the database name, but then it won't work.
 | sapics user-country, server-country | PDDL | `geoip_country` | **no** | own schema, see 4 |
 | sapics [origin-asn][sapics-asn] | PDDL | `geoip_asn` | yes | from BGP, daily |
 | IPLocate.io free databases | CC BY-SA 4.0 | any | **no** | own schema, see 4 |
+| [anonymous-lists][anonlists] | CC0, MIT | `geoip_anonymous` | yes | experimental, see 5 |
 
 All MMDB format, checked with October 2026 files.
 
@@ -79,6 +80,11 @@ All MMDB format, checked with October 2026 files.
    proxies switch.
 4. Own record layout (e.g. `country_code`), so the file loads but every
    address is unknown.
+5. Built by the plugin author from the Tor Project exit lists and
+   X4BNet's datacenter and VPN lists, in MaxMind's record layout,
+   rebuilt daily. `type tor`, `hosting`, `vpn`, and `anonymous` work,
+   `public_proxy` and `residential_proxy` are never set. New, and may
+   change or go away.
 
 #### Checking a file yourself
 
@@ -119,8 +125,10 @@ These were checked in October 2026, counts are distinct ASNs at that time.
 
 ## Without an Anonymous IP database
 
-MaxMind's Anonymous IP database is paid. For each `type`, what a free
-source can do instead:
+MaxMind's Anonymous IP database is paid. The experimental
+[anonymous-lists][anonlists] file carries `tor`, `hosting`, and `vpn` in
+one MMDB, built from the Tor Project and X4BNet lists below. For each
+`type`, what a free source can do instead:
 
 | `type` | Free substitute | Where | Coverage |
 |---|---|---|---|
@@ -128,7 +136,7 @@ source can do instead:
 | `vpn` | X4BNet [VPN ASNs][x4b-vpn] | `geoip_asn` + `asn_file` | thin, 16 providers that run their own network. Most VPN exits sit in hosting space, so the hosting list catches them, along with every other hosting customer |
 | `public_proxy` | IP2Location [IP2Proxy LITE][ip2proxy], MMDB | `geoip_anonymous` with `type anonymous` | good, it is an open-proxy list in the same record layout |
 | `anonymous` | the three rows above together | both matchers | partial, umbrella minus Tor and residential |
-| `tor` | Tor Project [exit list][torbulk] | **not in this plugin.** Exits are addresses, not networks, so an IP source, CrowdSec's Tor blocklist, or the firewall | good, the list is authoritative and hourly |
+| `tor` | Tor Project [exit list][torbulk] | `geoip_anonymous` with `type tor`, via [anonymous-lists][anonlists]. Otherwise an IP source such as CrowdSec's Tor blocklist, or the firewall | good, the list is authoritative |
 | `residential_proxy` | none | none | by design these are addresses on consumer ISPs, only commercial data such as MaxMind's sees them |
 
 [dbip-country]: https://db-ip.com/db/download/ip-to-country-lite
@@ -146,3 +154,4 @@ source can do instead:
 [bah]: https://github.com/brianhama/bad-asn-list
 [bfi]: https://github.com/bountyyfi/bad-asn-list
 [torbulk]: https://check.torproject.org/torbulkexitlist
+[anonlists]: https://github.com/davidscarth/anonymous-lists
