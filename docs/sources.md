@@ -63,7 +63,7 @@ looks at the database name, but then it won't work.
 | IP2Location LITE [ASN][ip2l-asn] | [proprietary][ip2l-terms] | `geoip_asn` | yes | |
 | IP2Location [IP2Proxy LITE PX10][ip2proxy] | [proprietary][ip2l-terms] | `geoip_anonymous` | yes | public proxies only, see 3 |
 | Geoacumen [Country][geoacumen] | Apache-2.0 | `geoip_country` | yes | as of Oct 26 2026 |
-| sapics [user-country, server-country][sapics-country] | PDDL | `geoip_country` | yes | as of Oct 28 2026 |
+| sapics [user-country, server-country][sapics-country] | PDDL | `geoip_country` | yes | as of Oct 29 2026 |
 | sapics [origin-asn][sapics-asn] | PDDL | `geoip_asn` | yes | |
 | IPLocate.io free databases | CC BY-SA 4.0 | any | **no** | own schema, see 4 |
 | [anonymous-lists][anonlists] | CC0, MIT | `geoip_anonymous` | yes | experimental, see 5 |
@@ -80,11 +80,13 @@ All MMDB format, checked with October 2026 files.
    proxies switch.
 4. Own record layout (e.g. `country_code`), so the file loads but every
    address is unknown.
-5. Built by the plugin author from the Tor Project exit lists and
-   X4BNet's datacenter and VPN lists, in MaxMind's record layout,
-   rebuilt daily. `type tor`, `hosting`, `vpn`, and `anonymous` work,
-   `public_proxy` and `residential_proxy` are never set. New, and may
-   change or go away. See that project [README][anonlists] for details.
+5. Built by the plugin author from the Tor Project exit lists, X4BNet's
+   datacenter and VPN lists, and IPLocate's free proxy list, in
+   MaxMind's record layout, rebuilt daily. `type tor`, `hosting`, `vpn`,
+   `public_proxy`, and `anonymous` work, `residential_proxy` is never
+   set. iCloud Private Relay is carved out. `public_proxy` is any
+   address IPLocate listed in the last 14 days. Experimental, and may
+   change or go away.
 
 #### Checking a file yourself
 
@@ -125,18 +127,22 @@ These were checked in October 2026, counts are distinct ASNs at that time.
 
 ## Without an Anonymous IP database
 
-MaxMind's Anonymous IP database is paid. The experimental
-[anonymous-lists][anonlists] file carries `tor`, `hosting`, and `vpn` in
-one MMDB, built from the Tor Project exit lists and X4BNet's datacenter
-and VPN lists. For each `type`, what a free source can do instead:
+MaxMind's Anonymous IP database is paid. [anonymous-lists][anonlists]
+is a free one, built from the Tor Project exit lists, X4BNet's
+datacenter and VPN lists, and IPLocate's free proxy list, carrying
+`tor`, `hosting`, `vpn`, and `public_proxy` in one MMDB. It is
+experimental.
+
+If you would rather not depend on an experimental project, this is how
+to roll your own for each `type` from other free sources:
 
 | `type` | Free substitute | Where | Coverage |
 |---|---|---|---|
 | `hosting` | X4BNet [datacenter ASNs][x4b-dc], brianhama or bountyyfi [bad-asn-list][bah] | `geoip_asn` + `asn_file` | good, hosting is a property of the network, so ASN is the natural key |
 | `vpn` | X4BNet [VPN ASNs][x4b-vpn] | `geoip_asn` + `asn_file` | thin, 16 providers that run their own network. Most VPN exits sit in hosting space, so the hosting list catches them, along with every other hosting customer |
-| `public_proxy` | IP2Location [IP2Proxy LITE][ip2proxy], MMDB | `geoip_anonymous` with `type anonymous` | good, it is an open-proxy list in the same record layout |
-| `anonymous` | the three rows above together | both matchers | partial, umbrella minus Tor and residential |
-| `tor` | Tor Project [exit list][torbulk] | `geoip_anonymous` with `type tor`, via [anonymous-lists][anonlists]. Otherwise an IP source such as CrowdSec's Tor blocklist, or the firewall | good, the list is authoritative |
+| `public_proxy` | IP2Location [IP2Proxy LITE][ip2proxy], MMDB | `geoip_anonymous` with `type anonymous` | good, it is an open-proxy list in the same record layout, large and slow to forget |
+| `tor` | Tor Project [exit list][torbulk] | a plain text list, so not this plugin unless you build it into an MMDB with boolean flags yourself. Otherwise an IP source such as CrowdSec's Tor blocklist, or the firewall | good, the list is authoritative and hourly |
+| `anonymous` | the rows above together | both matchers | partial, umbrella minus residential |
 | `residential_proxy` | none | none | by design these are addresses on consumer ISPs, only commercial data such as MaxMind's sees them |
 
 [dbip-country]: https://db-ip.com/db/download/ip-to-country-lite
