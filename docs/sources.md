@@ -80,12 +80,7 @@ All MMDB format, checked with October 2026 files.
    proxies switch.
 4. Own record layout (e.g. `country_code`), so the file loads but every
    address is unknown.
-5. Built by the plugin author from the Tor Project exit lists, X4BNet's
-   datacenter and VPN lists, and IPLocate's free proxy list, in
-   MaxMind's record layout, rebuilt daily. `type tor`, `hosting`, `vpn`,
-   `public_proxy`, and `anonymous` work, `residential_proxy` is never set.
-   iCloud Private Relay and VPN by Google is carved out. Experimental,
-   and may change or go away.
+5. Built by the plugin author. Experimental, and may change or go away.
 
 #### Checking a file yourself
 
