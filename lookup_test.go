@@ -36,6 +36,21 @@ const (
 	ispDB      = "testdata/GeoIP2-ISP-Test.mmdb"
 	entDB      = "testdata/GeoIP2-Enterprise-Test.mmdb"
 	ipv4DB     = "testdata/MaxMind-DB-test-ipv4-24.mmdb" // ip_version 4 db test
+
+	// Shield editions: the plain editions plus addresses MaxMind removes
+	// from those on privacy opt-out requests. Same records, same layout.
+	countryShieldDB = "testdata/GeoIP2-Country-Shield-Test.mmdb"
+	cityShieldDB    = "testdata/GeoIP2-City-Shield-Test.mmdb"
+	entShieldDB     = "testdata/GeoIP2-Enterprise-Shield-Test.mmdb"
+
+	// Editions no matcher reads today. Kept so that adopting one flips a
+	// test rather than slipping in unnoticed.
+	regionsDB  = "testdata/GeoIP-Regions-Test.mmdb"          // country and subdivisions with confidence scores
+	connTypeDB = "testdata/GeoIP2-Connection-Type-Test.mmdb" // cable, cellular, corporate, satellite
+
+	// Deliberately damaged City files from the same repository.
+	badMetadataDB = "testdata/GeoIP2-City-Test-Invalid-Node-Count.mmdb"
+	badDoubleDB   = "testdata/GeoIP2-City-Test-Broken-Double-Format.mmdb"
 )
 
 // newRequest builds a request from the given remote address with the
@@ -69,6 +84,7 @@ func TestModuleIDs(t *testing.T) {
 		"http.matchers.geoip_country":     MatchGeoIPCountry{},
 		"http.matchers.geoip_subdivision": MatchGeoIPSubdivision{},
 		"http.matchers.geoip_asn":         MatchGeoIPASN{},
+		"http.matchers.geoip_anonymous":   MatchGeoIPAnonymous{},
 	} {
 		info := m.CaddyModule()
 		if got := string(info.ID); got != want {
@@ -196,6 +212,7 @@ func TestLookupErrorFailsClosed(t *testing.T) {
 	country := &MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}}
 	asn := &MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}}
 	subdivision := &MatchGeoIPSubdivision{DB: cityDB, Country: "US", Subdivisions: []string{"WA"}}
+	anonymous := &MatchGeoIPAnonymous{DB: anonDB, Types: []string{"vpn"}}
 
 	for name, tc := range map[string]struct {
 		provision func() error
@@ -217,6 +234,11 @@ func TestLookupErrorFailsClosed(t *testing.T) {
 			func() error { return subdivision.db.Close() },
 			subdivision.MatchWithError,
 		},
+		"anonymous": {
+			func() error { return anonymous.Provision(caddy.Context{}) },
+			func() error { return anonymous.db.Close() },
+			anonymous.MatchWithError,
+		},
 	} {
 		if err := tc.provision(); err != nil {
 			t.Fatalf("%s: provision: %v", name, err)
@@ -227,6 +249,8 @@ func TestLookupErrorFailsClosed(t *testing.T) {
 		got, err := tc.match(newRequest("81.2.69.142:1234"))
 		if err == nil {
 			t.Errorf("%s: expected an error from a closed database", name)
+		} else if !strings.Contains(err.Error(), "geoip_"+name) {
+			t.Errorf("%s: error does not name the matcher: %v", name, err)
 		}
 		if got {
 			t.Errorf("%s: expected no match on error", name)
@@ -243,6 +267,7 @@ func TestUnprovisionedFailsClosed(t *testing.T) {
 		"country":     &MatchGeoIPCountry{},
 		"asn":         &MatchGeoIPASN{},
 		"subdivision": &MatchGeoIPSubdivision{},
+		"anonymous":   &MatchGeoIPAnonymous{},
 	} {
 		got, err := m.MatchWithError(r)
 		if err == nil {
@@ -348,6 +373,7 @@ func TestEarlyDataRejected(t *testing.T) {
 		"subdivision": &MatchGeoIPSubdivision{
 			DB: cityDB, Country: "GB", Subdivisions: []string{"ENG"},
 		},
+		"anonymous": &MatchGeoIPAnonymous{DB: anonDB, Types: []string{"vpn"}},
 	}
 
 	for name, m := range matchers {
@@ -616,6 +642,87 @@ func TestEnterpriseCountryAndSubdivision(t *testing.T) {
 	}
 	if got, _ := s.MatchWithError(newRequest("2.125.160.216:1234")); !got {
 		t.Error("expected WBK to match from an Enterprise database")
+	}
+}
+
+// TestShieldEditions checks that each matcher accepting a plain edition
+// accepts its Shield counterpart and matches the same way. The type
+// check admits Shield files by name alone, so without this a layout
+// change on MaxMind's side would be accepted at load and match nothing.
+func TestShieldEditions(t *testing.T) {
+	for _, db := range []string{countryShieldDB, cityShieldDB, entShieldDB} {
+		m := MatchGeoIPCountry{DB: db, Countries: []string{"GB"}}
+		if err := m.Provision(caddy.Context{}); err != nil {
+			t.Fatalf("country %s: %v", db, err)
+		}
+		if ok, err := m.MatchWithError(newRequest("81.2.69.160:1234")); err != nil || !ok {
+			t.Errorf("country %s: expected GB match, got %v %v", db, ok, err)
+		}
+	}
+	for _, db := range []string{cityShieldDB, entShieldDB} {
+		m := MatchGeoIPSubdivision{DB: db, Country: "GB", Subdivisions: []string{"ENG"}}
+		if err := m.Provision(caddy.Context{}); err != nil {
+			t.Fatalf("subdivision %s: %v", db, err)
+		}
+		if ok, err := m.MatchWithError(newRequest("81.2.69.160:1234")); err != nil || !ok {
+			t.Errorf("subdivision %s: expected ENG match, got %v %v", db, ok, err)
+		}
+	}
+	m := MatchGeoIPASN{DB: entShieldDB, ASNs: []uint32{14671}}
+	if err := m.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("asn %s: %v", entShieldDB, err)
+	}
+	if ok, err := m.MatchWithError(newRequest("74.209.24.0:1234")); err != nil || !ok {
+		t.Errorf("asn %s: expected AS14671 match, got %v %v", entShieldDB, ok, err)
+	}
+}
+
+// TestRefusedEditions pins that Regions, Connection Type, and
+// Residential Proxy are refused by every matcher when the config loads.
+func TestRefusedEditions(t *testing.T) {
+	for _, db := range []string{regionsDB, connTypeDB, resProxyDB} {
+		for name, p := range map[string]caddy.Provisioner{
+			"country":     &MatchGeoIPCountry{DB: db, Countries: []string{"US"}},
+			"subdivision": &MatchGeoIPSubdivision{DB: db, Country: "US", Subdivisions: []string{"CA"}},
+			"asn":         &MatchGeoIPASN{DB: db, ASNs: []uint32{1}},
+			"anonymous":   &MatchGeoIPAnonymous{DB: db, Types: []string{"vpn"}},
+		} {
+			if err := p.Provision(caddy.Context{}); err == nil {
+				t.Errorf("%s: expected %s to be refused", name, db)
+			}
+		}
+	}
+}
+
+// TestDamagedDatabases covers two of MaxMind's deliberately broken
+// files. Corrupt metadata is refused when the config loads, before any
+// lookup. A malformed double in the location record is never read by
+// the matchers, so that file loads and matches like an intact City file.
+func TestDamagedDatabases(t *testing.T) {
+	for name, p := range map[string]caddy.Provisioner{
+		"country":     &MatchGeoIPCountry{DB: badMetadataDB, Countries: []string{"US"}},
+		"subdivision": &MatchGeoIPSubdivision{DB: badMetadataDB, Country: "US", Subdivisions: []string{"CA"}},
+		"asn":         &MatchGeoIPASN{DB: badMetadataDB, ASNs: []uint32{1}},
+		"anonymous":   &MatchGeoIPAnonymous{DB: badMetadataDB, Types: []string{"vpn"}},
+	} {
+		if err := p.Provision(caddy.Context{}); err == nil {
+			t.Errorf("%s: expected %s to be refused", name, badMetadataDB)
+		}
+	}
+
+	c := MatchGeoIPCountry{DB: badDoubleDB, Countries: []string{"GB"}}
+	if err := c.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("country %s: %v", badDoubleDB, err)
+	}
+	if ok, err := c.MatchWithError(newRequest("81.2.69.160:1234")); err != nil || !ok {
+		t.Errorf("country %s: expected GB match, got %v %v", badDoubleDB, ok, err)
+	}
+	s := MatchGeoIPSubdivision{DB: badDoubleDB, Country: "GB", Subdivisions: []string{"ENG"}}
+	if err := s.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("subdivision %s: %v", badDoubleDB, err)
+	}
+	if ok, err := s.MatchWithError(newRequest("81.2.69.160:1234")); err != nil || !ok {
+		t.Errorf("subdivision %s: expected ENG match, got %v %v", badDoubleDB, ok, err)
 	}
 }
 

@@ -16,7 +16,8 @@ func TestMatchConcurrent(t *testing.T) {
 	country := &MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}}
 	asn := &MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}}
 	subdivision := &MatchGeoIPSubdivision{DB: cityDB, Country: "US", Subdivisions: []string{"WA"}}
-	for _, p := range []interface{ Provision(caddy.Context) error }{country, asn, subdivision} {
+	anonymous := &MatchGeoIPAnonymous{DB: anonDB, Types: []string{"tor"}}
+	for _, p := range []interface{ Provision(caddy.Context) error }{country, asn, subdivision, anonymous} {
 		if err := p.Provision(caddy.Context{}); err != nil {
 			t.Fatal(err)
 		}
@@ -38,6 +39,10 @@ func TestMatchConcurrent(t *testing.T) {
 					return
 				}
 				if _, err := subdivision.MatchWithError(newRequest("216.160.83.56:1234")); err != nil {
+					t.Error(err)
+					return
+				}
+				if _, err := anonymous.MatchWithError(newRequest("1.124.213.1:1234")); err != nil {
 					t.Error(err)
 					return
 				}

@@ -3,9 +3,12 @@
 package caddygeoip
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/netip"
+	"os"
 	"strconv"
 	"strings"
 
@@ -30,6 +33,11 @@ type MatchGeoIPASN struct {
 
 	// Autonomous system numbers to match.
 	ASNs []uint32 `json:"asns,omitempty"`
+
+	// Path to a file of autonomous system numbers to match, one per
+	// line with or without an AS prefix, or Spamhaus ASN-DROP in its
+	// JSON lines form. Combined with ASNs. Supports placeholders.
+	ASNFile string `json:"asn_file,omitempty"`
 
 	// Whether an IP the database has no entry for (loopback, private
 	// ranges, unallocated space) matches. Default: false.
@@ -64,6 +72,11 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 		}
 		m.asns[strconv.FormatUint(uint64(n), 10)] = struct{}{}
 	}
+	if m.ASNFile != "" {
+		if err := readASNFile(m.ASNFile, m.asns); err != nil {
+			return err
+		}
+	}
 	var err error
 	if m.db, err = openDB(m.DB, "asn", "isp", "enterprise"); err != nil {
 		return err
@@ -79,13 +92,93 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 	return nil
 }
 
+// readASNFile adds the autonomous system numbers in the file at path
+// to the set. A line starts with the number, with or without an AS
+// prefix, followed by nothing or by a space, tab, comma, semicolon, or
+// comment and anything after that (a name, a column), which covers
+// plain lists, "AS1234 Name" lists, and CSV. A line that is a JSON
+// object is read as Spamhaus ASN-DROP writes them, by its "asn"
+// member. Blank lines, comments, lines with no digits at all (a CSV
+// header), and JSON lines without an "asn" member (ASN-DROP's metadata
+// line) are skipped. The file must yield at least one number. It is
+// read a line at a time, so only the numbers are held in memory. An
+// empty path, a file over 64 MiB, or a line holding binary data (a
+// database given in place of a list) is refused.
+func readASNFile(path string, set map[string]struct{}) error {
+	path = caddy.NewReplacer().ReplaceAll(path, "")
+	if path == "" {
+		return fmt.Errorf("asn_file: path is empty after placeholder replacement")
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("asn_file: %w", err)
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err != nil {
+		return fmt.Errorf("asn_file: %w", err)
+	} else if info.Size() > 64<<20 {
+		return fmt.Errorf("asn_file: %s: %d bytes, too large to be a list", path, info.Size())
+	}
+	found, line := 0, 0
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line++
+		text := strings.TrimSpace(strings.TrimPrefix(sc.Text(), "\ufeff")) // Windows editors write a byte order mark
+		if strings.IndexByte(text, 0) >= 0 {
+			return fmt.Errorf("asn_file: %s: binary data or UTF-16, not a UTF-8 list", path)
+		}
+		if text == "" || text[0] == '#' {
+			continue
+		}
+		var n uint64
+		if text[0] == '{' {
+			var rec struct {
+				ASN uint32 `json:"asn"`
+			}
+			if err := json.Unmarshal([]byte(text), &rec); err != nil {
+				return fmt.Errorf("asn_file: %s:%d: %w", path, line, err)
+			}
+			if rec.ASN == 0 {
+				continue
+			}
+			n = uint64(rec.ASN)
+		} else {
+			if !strings.ContainsAny(text, "0123456789") {
+				continue // a header or label line
+			}
+			num := text
+			if len(num) > 2 && strings.EqualFold(num[:2], "AS") {
+				num = num[2:]
+			}
+			end := strings.IndexFunc(num, func(r rune) bool { return r < '0' || r > '9' })
+			if end < 0 {
+				end = len(num)
+			} else if !strings.ContainsRune(" \t,;#", rune(num[end])) {
+				end = 0
+			}
+			if n, err = strconv.ParseUint(num[:end], 10, 32); err != nil || n == 0 {
+				return fmt.Errorf("asn_file: %s:%d: invalid asn %q", path, line, text)
+			}
+		}
+		set[strconv.FormatUint(n, 10)] = struct{}{}
+		found++
+	}
+	if err := sc.Err(); err != nil {
+		return fmt.Errorf("asn_file: %s: %w", path, err)
+	}
+	if found == 0 {
+		return fmt.Errorf("asn_file: %s: no autonomous system numbers found", path)
+	}
+	return nil
+}
+
 // Validate ensures the configuration is usable.
 func (m *MatchGeoIPASN) Validate() error {
 	if m.DB == "" {
 		return fmt.Errorf("db is required")
 	}
-	if len(m.ASNs) == 0 {
-		return fmt.Errorf("at least one asn is required")
+	if len(m.ASNs) == 0 && m.ASNFile == "" {
+		return fmt.Errorf("at least one asn or an asn_file is required")
 	}
 	return nil
 }
@@ -125,7 +218,7 @@ func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
 func (m *MatchGeoIPASN) asnOf(ip netip.Addr) (string, error) {
 	var n uint32
 	if err := m.db.Lookup(ip).DecodePath(&n, m.asnPath...); err != nil {
-		return "", err
+		return "", fmt.Errorf("geoip_asn: %s: %w", m.DB, err)
 	}
 	if n == 0 {
 		return "", nil
@@ -136,8 +229,9 @@ func (m *MatchGeoIPASN) asnOf(ip netip.Addr) (string, error) {
 // UnmarshalCaddyfile sets up the matcher from Caddyfile tokens. Syntax:
 //
 //	geoip_asn {
-//	    db  <path>
-//	    asn <numbers...>
+//	    db       <path>
+//	    asn      <numbers...>
+//	    asn_file <path>
 //	    match_unknown
 //	}
 func (m *MatchGeoIPASN) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
@@ -166,6 +260,13 @@ func (m *MatchGeoIPASN) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 						return d.Errf("invalid asn %q", a)
 					}
 					m.ASNs = append(m.ASNs, uint32(n))
+				}
+			case "asn_file":
+				if m.ASNFile != "" {
+					return d.Err("asn_file already specified")
+				}
+				if !d.AllArgs(&m.ASNFile) {
+					return d.ArgErr()
 				}
 			case "match_unknown":
 				if d.NextArg() {
