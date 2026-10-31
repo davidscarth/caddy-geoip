@@ -66,7 +66,7 @@ looks at the database name, but then it won't work.
 | sapics [user-country, server-country][sapics-country] | PDDL | `geoip_country` | yes | as of Oct 29 2026 |
 | sapics [origin-asn][sapics-asn] | PDDL | `geoip_asn` | yes | |
 | IPLocate.io free databases | CC BY-SA 4.0 | any | **no** | own schema, see 4 |
-| [open-anonymous-ip][anonlists] | CC0, MIT | `geoip_anonymous` | yes | experimental, see 5 |
+| [open-anonymous-ip][openanonip] | CC0, MIT | `geoip_anonymous` | yes | experimental, see 5 |
 
 All MMDB format, checked with October 2026 files.
 
@@ -123,12 +123,11 @@ These were checked in October 2026, counts are distinct ASNs at that time.
 
 MaxMind's Anonymous IP database is paid. For serious work, use it.
 
-If paid data is not an option,
-[open-anonymous-ip](https://github.com/davidscarth/open-anonymous-ip) is a
-free one by the plugin author, built from the Tor Project exit lists,
-X4BNet's datacenter and VPN lists, and IPLocate's free proxy list, carrying
-`tor`, `hosting`, `vpn`, and `public_proxy` in one MMDB, rebuilt daily. It
-is experimental, and may change or go away.
+If paid data is not an option, [open-anonymous-ip][openanonip] is a free one
+by the plugin author, built from the Tor Project exit lists, X4BNet's
+datacenter and VPN lists, and IPLocate's free proxy list, carrying `tor`,
+`hosting`, `vpn`, and `public_proxy` in one MMDB, rebuilt daily. It is
+experimental, and may change or go away.
 
 If you would rather not depend on an experimental project, this is how
 to roll your own for each `type` from other free sources:
@@ -158,4 +157,4 @@ to roll your own for each `type` from other free sources:
 [bah]: https://github.com/brianhama/bad-asn-list
 [bfi]: https://github.com/bountyyfi/bad-asn-list
 [torbulk]: https://check.torproject.org/torbulkexitlist
-[anonlists]: https://github.com/davidscarth/anonymous-lists
+[openanonip]: https://github.com/davidscarth/open-anonymous-ip
