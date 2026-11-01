@@ -16,9 +16,11 @@ package caddygeoip
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/netip"
 	"strings"
+	"time"
 
 	"github.com/oschwald/maxminddb-golang/v2"
 
@@ -36,11 +38,12 @@ var countryPath = []any{"country", "iso_code"}
 // openDB opens the MaxMind database at path, replacing placeholders,
 // and checks that its type contains one of the given words, so that a
 // Country database is not silently used for ASN matching or vice versa.
+// It logs the database's age to logger (see logDBAge).
 //
 // No Cleanup on purpose. A Caddy reload would run it with lookups still
 // in flight, triggering a race condition. Instead we rely on GC to
 // release the mapping.
-func openDB(path string, types ...string) (*maxminddb.Reader, error) {
+func openDB(logger *slog.Logger, path string, types ...string) (*maxminddb.Reader, error) {
 	path = caddy.NewReplacer().ReplaceAll(path, "")
 	if path == "" {
 		// An unset placeholder such as {env.GEOIP_DB} replaces to
@@ -65,7 +68,50 @@ func openDB(path string, types ...string) (*maxminddb.Reader, error) {
 		return nil, fmt.Errorf("db %s is an IPv4-only database (ip_version %d), which is not supported",
 			path, v)
 	}
+	logDBAge(logger, path, db.Metadata, time.Now())
 	return db, nil
+}
+
+// maxAgeDays is how old a database or list may be before loading it logs a
+// warning. The log messages state it, so change them with it.
+const maxAgeDays = 30
+
+// lastRFC3339 is the last second RFC 3339 can write, 9999-12-31T23:59:59Z.
+const lastRFC3339 = 253402300799
+
+// logDBAge logs one line about a database that loaded: INFO with its build
+// date and age, WARN when it was built more than 30 days before now, or
+// WARN when the build date is missing or in the future, since its age is
+// then unknown. The file's modified time is not used in place of a missing
+// build date: a copy can carry the copy time, the source's time, or a
+// placeholder, none of which says when the data was built.
+func logDBAge(logger *slog.Logger, path string, md maxminddb.Metadata, now time.Time) {
+	where := []any{slog.String("path", path), slog.String("type", md.DatabaseType)}
+	if md.BuildEpoch == 0 || md.BuildEpoch > uint(now.Unix()) {
+		attrs := append(where, slog.Uint64("build_epoch", uint64(md.BuildEpoch)))
+		if md.BuildEpoch != 0 && md.BuildEpoch <= lastRFC3339 {
+			attrs = append(attrs, slog.String("built", rfc3339(int64(md.BuildEpoch))))
+		}
+		logger.Warn("database build date is missing or in the future", attrs...)
+		return
+	}
+	age := ageDays(time.Unix(int64(md.BuildEpoch), 0), now)
+	attrs := append(where, slog.String("built", rfc3339(int64(md.BuildEpoch))), slog.Int("age_days", age))
+	if age > maxAgeDays {
+		logger.Warn("database is more than 30 days old", attrs...)
+		return
+	}
+	logger.Info("database loaded", attrs...)
+}
+
+// ageDays is the whole days from t to now, rounded down.
+func ageDays(t, now time.Time) int {
+	return int(now.Sub(t) / (24 * time.Hour))
+}
+
+// rfc3339 formats Unix seconds as an RFC 3339 time in UTC.
+func rfc3339(sec int64) string {
+	return time.Unix(sec, 0).UTC().Format(time.RFC3339)
 }
 
 // hasType reports whether dbType contains any of the given words,

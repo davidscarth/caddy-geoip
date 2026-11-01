@@ -69,7 +69,7 @@ func (MatchGeoIPSubdivision) CaddyModule() caddy.ModuleInfo {
 // missing db, country, or subdivision is left for Validate to report,
 // since its messages explain what is required and why, and so the
 // database isn't opened for a config that is about to be refused.
-func (m *MatchGeoIPSubdivision) Provision(caddy.Context) error {
+func (m *MatchGeoIPSubdivision) Provision(ctx caddy.Context) error {
 	if m.DB == "" || m.Country == "" || len(m.Subdivisions) == 0 {
 		return nil
 	}
@@ -87,7 +87,7 @@ func (m *MatchGeoIPSubdivision) Provision(caddy.Context) error {
 	}
 
 	var err error
-	m.db, err = openDB(m.DB, "city", "enterprise")
+	m.db, err = openDB(ctx.Slogger(), m.DB, "city", "enterprise")
 	return err
 }
 

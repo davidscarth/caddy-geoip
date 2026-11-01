@@ -3,15 +3,18 @@
 package caddygeoip
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/oschwald/maxminddb-golang/v2"
 
@@ -52,6 +55,10 @@ const (
 	badMetadataDB = "testdata/GeoIP2-City-Test-Invalid-Node-Count.mmdb"
 	badDoubleDB   = "testdata/GeoIP2-City-Test-Broken-Double-Format.mmdb"
 )
+
+// discard is a logger for tests that call openDB or readASNFile directly
+// and don't check what they log.
+var discard = slog.New(slog.DiscardHandler)
 
 // newRequest builds a request from the given remote address with the
 // context a Caddy server would provide: a vars table, a replacer, and
@@ -98,21 +105,21 @@ func TestModuleIDs(t *testing.T) {
 
 func TestOpenDBTypeCheck(t *testing.T) {
 	for _, f := range []string{countryDB, countryDB2} {
-		db, err := openDB(f, "country", "city", "enterprise")
+		db, err := openDB(discard, f, "country", "city", "enterprise")
 		if err != nil {
 			t.Fatalf("opening %s: %v", f, err)
 		}
 		_ = db.Close()
 	}
 
-	if _, err := openDB(asnDB, "country", "city", "enterprise"); err == nil {
+	if _, err := openDB(discard, asnDB, "country", "city", "enterprise"); err == nil {
 		t.Error("expected error opening ASN db as a country db")
 	}
-	if _, err := openDB(countryDB, "asn", "isp", "enterprise"); err == nil {
+	if _, err := openDB(discard, countryDB, "asn", "isp", "enterprise"); err == nil {
 		t.Error("expected error opening country db as an ASN db")
 	}
 	for _, f := range []string{cityDB, cityDB2} {
-		db, err := openDB(f, "city", "enterprise")
+		db, err := openDB(discard, f, "city", "enterprise")
 		if err != nil {
 			t.Fatalf("opening %s: %v", f, err)
 		}
@@ -122,32 +129,32 @@ func TestOpenDBTypeCheck(t *testing.T) {
 	// A City database carries country data too, so the country matcher
 	// accepts it; a Country database has no subdivisions, so the
 	// subdivision matcher must not accept one.
-	if db, err := openDB(cityDB, "country", "city", "enterprise"); err != nil {
+	if db, err := openDB(discard, cityDB, "country", "city", "enterprise"); err != nil {
 		t.Errorf("expected a City db to be usable for country matching: %v", err)
 	} else {
 		_ = db.Close()
 	}
-	if _, err := openDB(countryDB, "city", "enterprise"); err == nil {
+	if _, err := openDB(discard, countryDB, "city", "enterprise"); err == nil {
 		t.Error("expected error opening country db as a city db")
 	}
 
-	if _, err := openDB("testdata/does-not-exist.mmdb", "country"); err == nil {
+	if _, err := openDB(discard, "testdata/does-not-exist.mmdb", "country"); err == nil {
 		t.Error("expected error opening missing file")
 	}
 
 	// The paid editions each matcher accepts.
-	if db, err := openDB(entDB, "country", "city", "enterprise"); err != nil {
+	if db, err := openDB(discard, entDB, "country", "city", "enterprise"); err != nil {
 		t.Errorf("expected an Enterprise db to be usable for country matching: %v", err)
 	} else {
 		_ = db.Close()
 	}
-	if db, err := openDB(entDB, "city", "enterprise"); err != nil {
+	if db, err := openDB(discard, entDB, "city", "enterprise"); err != nil {
 		t.Errorf("expected an Enterprise db to be usable for subdivision matching: %v", err)
 	} else {
 		_ = db.Close()
 	}
 	for _, f := range []string{ispDB, entDB} {
-		db, err := openDB(f, "asn", "isp", "enterprise")
+		db, err := openDB(discard, f, "asn", "isp", "enterprise")
 		if err != nil {
 			t.Fatalf("opening %s for ASN matching: %v", f, err)
 		}
@@ -156,7 +163,7 @@ func TestOpenDBTypeCheck(t *testing.T) {
 
 	// An unset placeholder replaces to nothing; the error should say so
 	// rather than report a missing file with no name.
-	_, err := openDB("{env.CADDY_GEOIP_TEST_UNSET}", "country")
+	_, err := openDB(discard, "{env.CADDY_GEOIP_TEST_UNSET}", "country")
 	if err == nil {
 		t.Fatal("expected error opening an empty path")
 	}
@@ -171,7 +178,7 @@ func TestOpenDBTypeCheck(t *testing.T) {
 // IPv6 request into a 5xx. The fixture's type is "Test", so the type
 // check is satisfied deliberately to reach the version check.
 func TestOpenDBRejectsIPv4Only(t *testing.T) {
-	_, err := openDB(ipv4DB, "test")
+	_, err := openDB(discard, ipv4DB, "test")
 	if err == nil {
 		t.Fatal("expected error opening an IPv4-only database")
 	}
@@ -181,7 +188,7 @@ func TestOpenDBRejectsIPv4Only(t *testing.T) {
 
 	// A type mismatch is the more common mistake and is reported
 	// first, so the version check must not mask it.
-	_, err = openDB(ipv4DB, "country")
+	_, err = openDB(discard, ipv4DB, "country")
 	if err == nil {
 		t.Fatal("expected type error opening a Test database as a country db")
 	}
@@ -1070,6 +1077,48 @@ func TestProvisionDefersEmptySet(t *testing.T) {
 		}
 		if err := m.Validate(); err == nil {
 			t.Errorf("%s: expected Validate to reject", name)
+		}
+	}
+}
+
+// logLines returns what fn logs, as JSON lines without the time, so a test
+// can pin the level, message, field names, field order, and values.
+func logLines(t *testing.T, fn func(*slog.Logger)) []string {
+	t.Helper()
+	var buf bytes.Buffer
+	h := slog.NewJSONHandler(&buf, &slog.HandlerOptions{
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if len(groups) == 0 && a.Key == slog.TimeKey {
+				return slog.Attr{}
+			}
+			return a
+		},
+	})
+	fn(slog.New(h))
+	return strings.Split(strings.TrimSpace(buf.String()), "\n")
+}
+
+// TestLogDBAge pins the line a database logs when it loads, for each age:
+// INFO within 30 days, WARN past that, and WARN when the build date is
+// missing, in the future, or beyond what RFC 3339 can write.
+func TestLogDBAge(t *testing.T) {
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name  string
+		epoch uint
+		want  string
+	}{
+		{"3 days", 1793275200, `{"level":"INFO","msg":"database loaded","path":"/db/x.mmdb","type":"GeoLite2-Country","built":"2026-10-29T12:00:00Z","age_days":3}`},
+		{"30 days 23 hours", 1790859600, `{"level":"INFO","msg":"database loaded","path":"/db/x.mmdb","type":"GeoLite2-Country","built":"2026-10-01T13:00:00Z","age_days":30}`},
+		{"31 days", 1790856000, `{"level":"WARN","msg":"database is more than 30 days old","path":"/db/x.mmdb","type":"GeoLite2-Country","built":"2026-10-01T12:00:00Z","age_days":31}`},
+		{"missing", 0, `{"level":"WARN","msg":"database build date is missing or in the future","path":"/db/x.mmdb","type":"GeoLite2-Country","build_epoch":0}`},
+		{"future", 1793538000, `{"level":"WARN","msg":"database build date is missing or in the future","path":"/db/x.mmdb","type":"GeoLite2-Country","build_epoch":1793538000,"built":"2026-11-01T13:00:00Z"}`},
+		{"past year 9999", 253402300800, `{"level":"WARN","msg":"database build date is missing or in the future","path":"/db/x.mmdb","type":"GeoLite2-Country","build_epoch":253402300800}`},
+	} {
+		md := maxminddb.Metadata{DatabaseType: "GeoLite2-Country", BuildEpoch: tc.epoch}
+		got := logLines(t, func(l *slog.Logger) { logDBAge(l, "/db/x.mmdb", md, now) })
+		if len(got) != 1 || got[0] != tc.want {
+			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
 		}
 	}
 }

@@ -8,11 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/netip"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/oschwald/maxminddb-golang/v2"
@@ -64,7 +66,7 @@ func (MatchGeoIPASN) CaddyModule() caddy.ModuleInfo {
 // Provision builds the ASN set and opens the database. A missing db,
 // or no asn and no asn_file, is left for Validate to report, so the
 // database isn't opened for a config that is about to be refused.
-func (m *MatchGeoIPASN) Provision(caddy.Context) error {
+func (m *MatchGeoIPASN) Provision(ctx caddy.Context) error {
 	if m.DB == "" || (len(m.ASNs) == 0 && len(m.ASNFiles) == 0) {
 		return nil
 	}
@@ -78,13 +80,14 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 		}
 		m.asns[strconv.FormatUint(uint64(n), 10)] = struct{}{}
 	}
+	logger := ctx.Slogger()
 	for _, path := range m.ASNFiles {
-		if err := readASNFile(path, m.asns); err != nil {
+		if err := readASNFile(logger, path, m.asns); err != nil {
 			return err
 		}
 	}
 	var err error
-	if m.db, err = openDB(m.DB, "asn", "isp", "enterprise"); err != nil {
+	if m.db, err = openDB(logger, m.DB, "asn", "isp", "enterprise"); err != nil {
 		return err
 	}
 
@@ -99,7 +102,8 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 }
 
 // readASNFile adds the autonomous system numbers in the file at path to
-// set, keyed by their decimal form. The path may hold placeholders.
+// set, keyed by their decimal form, and logs the list's age to logger (see
+// logListAge). The path may hold placeholders.
 //
 // A line holds one ASN, with or without an AS prefix, optionally followed
 // by a space, tab, comma, or semicolon and anything after it (a name, CSV
@@ -112,7 +116,7 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 // different ASNs, which would otherwise load only the first. The file must
 // be UTF-8 text of at most 64 MiB, pipes included, with lines under 64 KiB
 // and at least one ASN.
-func readASNFile(path string, set map[string]struct{}) error {
+func readASNFile(logger *slog.Logger, path string, set map[string]struct{}) error {
 	path = caddy.NewReplacer().ReplaceAll(path, "")
 	if path == "" {
 		return fmt.Errorf("asn_file: path is empty after placeholder replacement")
@@ -122,9 +126,14 @@ func readASNFile(path string, set map[string]struct{}) error {
 		return fmt.Errorf("asn_file: %w", err)
 	}
 	defer f.Close()
-	if info, err := f.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > 64<<20 {
+	info, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("asn_file: %w", err)
+	}
+	if info.Mode().IsRegular() && info.Size() > 64<<20 {
 		return fmt.Errorf("asn_file: %s: %d bytes, too large to be a list (64 MiB at most)", path, info.Size())
 	}
+	before := len(set)
 	fail := func(line int, format string, a ...any) error {
 		return fmt.Errorf("asn_file: %s:%d: %s", path, line, fmt.Sprintf(format, a...))
 	}
@@ -202,7 +211,24 @@ func readASNFile(path string, set map[string]struct{}) error {
 	case found == 0:
 		return fmt.Errorf("asn_file: %s: no autonomous system numbers found", path)
 	}
+	logListAge(logger, path, len(set)-before, info.ModTime(), time.Now())
 	return nil
+}
+
+// logListAge logs one line about an ASN list that loaded: INFO with how
+// many ASNs it added, its modified time, and its age, WARN when it was
+// modified more than 30 days before now, or WARN when its modified time is
+// in the future. asns counts only ASNs not already in the set.
+func logListAge(logger *slog.Logger, path string, asns int, modified, now time.Time) {
+	attrs := []any{slog.String("path", path), slog.Int("asns", asns), slog.String("modified", modified.UTC().Format(time.RFC3339))}
+	switch {
+	case modified.After(now):
+		logger.Warn("asn list modified time is in the future", attrs...)
+	case ageDays(modified, now) > maxAgeDays:
+		logger.Warn("asn list is more than 30 days old", append(attrs, slog.Int("age_days", ageDays(modified, now)))...)
+	default:
+		logger.Info("asn list loaded", append(attrs, slog.Int("age_days", ageDays(modified, now)))...)
+	}
 }
 
 // parseASN parses an AS number from 1 to 4294967295 in asplain form

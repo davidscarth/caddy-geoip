@@ -101,7 +101,7 @@ func (MatchGeoIPAnonymous) CaddyModule() caddy.ModuleInfo {
 // Provision builds the kind mask and opens the database. A missing db
 // or type is left for Validate to report, so the database isn't opened
 // for a config that is about to be refused.
-func (m *MatchGeoIPAnonymous) Provision(caddy.Context) error {
+func (m *MatchGeoIPAnonymous) Provision(ctx caddy.Context) error {
 	if m.DB == "" || len(m.Types) == 0 {
 		return nil
 	}
@@ -113,7 +113,7 @@ func (m *MatchGeoIPAnonymous) Provision(caddy.Context) error {
 		m.types |= 1 << i
 	}
 	var err error
-	m.db, err = openDB(m.DB, "anonymous", "ip-risk")
+	m.db, err = openDB(ctx.Slogger(), m.DB, "anonymous", "ip-risk")
 	return err
 }
 

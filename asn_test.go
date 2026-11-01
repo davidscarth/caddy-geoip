@@ -3,6 +3,7 @@
 package caddygeoip
 
 import (
+	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/caddyserver/caddy/v2"
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
@@ -362,7 +364,7 @@ func FuzzReadASNFile(f *testing.F) {
 			t.Fatal(err)
 		}
 		set := map[string]struct{}{}
-		if err := readASNFile(path, set); err != nil {
+		if err := readASNFile(discard, path, set); err != nil {
 			return
 		}
 		for k := range set {
@@ -372,4 +374,25 @@ func FuzzReadASNFile(f *testing.F) {
 			}
 		}
 	})
+}
+
+// TestLogListAge pins the line an ASN list logs when it loads: INFO within
+// 30 days of its modified time, WARN past that, and WARN when the modified
+// time is in the future.
+func TestLogListAge(t *testing.T) {
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name     string
+		modified time.Time
+		want     string
+	}{
+		{"3 days", now.AddDate(0, 0, -3), `{"level":"INFO","msg":"asn list loaded","path":"/etc/caddy/drop.json","asns":443,"modified":"2026-10-29T12:00:00Z","age_days":3}`},
+		{"45 days", now.AddDate(0, 0, -45), `{"level":"WARN","msg":"asn list is more than 30 days old","path":"/etc/caddy/drop.json","asns":443,"modified":"2026-09-17T12:00:00Z","age_days":45}`},
+		{"future", now.Add(time.Hour), `{"level":"WARN","msg":"asn list modified time is in the future","path":"/etc/caddy/drop.json","asns":443,"modified":"2026-11-01T13:00:00Z"}`},
+	} {
+		got := logLines(t, func(l *slog.Logger) { logListAge(l, "/etc/caddy/drop.json", 443, tc.modified, now) })
+		if len(got) != 1 || got[0] != tc.want {
+			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
 }
