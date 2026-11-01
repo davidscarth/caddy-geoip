@@ -1050,3 +1050,26 @@ func TestPlaceholderSurvivesAbsentRecord(t *testing.T) {
 		t.Errorf("expected US-WA to survive an absent record, got %q", got)
 	}
 }
+
+// TestProvisionDefersEmptySet pins that a matcher with a db but nothing
+// to match leaves the error to Validate without opening the database:
+// the path does not exist, so opening it would fail Provision.
+func TestProvisionDefersEmptySet(t *testing.T) {
+	const db = "testdata/does-not-exist.mmdb"
+	for name, m := range map[string]interface {
+		caddy.Provisioner
+		caddy.Validator
+	}{
+		"country":     &MatchGeoIPCountry{DB: db},
+		"subdivision": &MatchGeoIPSubdivision{DB: db, Country: "US"},
+		"asn":         &MatchGeoIPASN{DB: db},
+		"anonymous":   &MatchGeoIPAnonymous{DB: db},
+	} {
+		if err := m.Provision(caddy.Context{}); err != nil {
+			t.Errorf("%s: expected Provision to defer, got %v", name, err)
+		}
+		if err := m.Validate(); err == nil {
+			t.Errorf("%s: expected Validate to reject", name)
+		}
+	}
+}

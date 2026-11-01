@@ -46,9 +46,10 @@ func (MatchGeoIPCountry) CaddyModule() caddy.ModuleInfo {
 }
 
 // Provision builds the country set and opens the database. A missing
-// db is left for Validate to report.
+// db or country is left for Validate to report, so the database isn't
+// opened for a config that is about to be refused.
 func (m *MatchGeoIPCountry) Provision(caddy.Context) error {
-	if m.DB == "" {
+	if m.DB == "" || len(m.Countries) == 0 {
 		return nil
 	}
 	m.countries = make(map[string]struct{}, len(m.Countries))

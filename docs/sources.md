@@ -103,11 +103,13 @@ accepts a few forms:
 
 The parser expects the number first on every line, `AS` prefix or not,
 and ignores whatever follows a space, tab, comma, semicolon, or `#`.
-Blank lines, `#` comments, and lines with no digits such as a CSV header
-are skipped. A line that does not start with a number, a file over 64
-MiB, or binary data (including UTF-16, save as UTF-8) is an error at
-load, naming the file and line. None of the forms is preferred, use whichever
-one you like.
+Blank lines, lines starting with `#`, `;`, or `//`, and a CSV header on
+the first line are skipped. Any other line that does not start with a
+number is an error at load, naming the file and line. So is a line of
+several different ASNs (`14061,16509`), a file over 64 MiB, or binary
+data. An RIR or NRO delegated statistics file is refused with a note to
+filter it down to the ASNs you want. None of the forms is preferred, use
+whichever one you like.
 
 | List | Format | ASNs | Stands in for |
 |---|---|---|---|

@@ -5,6 +5,7 @@ package caddygeoip
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -63,6 +64,14 @@ func TestASNUnmarshalCaddyfile(t *testing.T) {
 				asn 001221
 			}`,
 			wantASNs: 1,
+		},
+		// ASN 0 is reserved, and refused here so the error has a line.
+		{
+			input: `geoip_asn {
+				db /tmp/ASN.mmdb
+				asn 0
+			}`,
+			wantErr: true,
 		},
 		{
 			input: `geoip_asn {
@@ -220,6 +229,29 @@ func TestASNFile(t *testing.T) {
 		{file: write("bigjson.json", `{"asn":4294967296}`+"\n"), wantErr: "bigjson.json:1"},
 		{file: write("bom.txt", "\ufeff1221\n64496\n"), wantLen: 2},
 		{file: write("utf16.txt", "\xff\xfe1\x002\x002\x001\x00\r\x00\n\x00"), wantErr: "UTF-16"},
+
+		// Comment lines, and headers: one with a digit in a later column,
+		// and a single-column one, which must name the column.
+		{file: write("comments.txt", "; list\n// note\n1221 // Telstra\n64496 ; Example\n"), wantLen: 2},
+		{file: write("count.csv", "asn,ipv4_count\n1221,12\n64496,40\n"), wantLen: 2},
+		{file: write("column.txt", "ASN\n1221\n"), wantLen: 1},
+		{file: write("tomsk.txt", "AS5567 AS5567 (Tomsk Polytechnic)\n"), wantLen: 1},
+
+		// Files that used to load in part, without an error.
+		{file: write("oneline.csv", "1221,64496,64497\n"), wantErr: "oneline.csv:1: several ASNs on one line"},
+		{file: write("oneline.txt", "AS1221 AS64496\n"), wantErr: "oneline.txt:1: several ASNs on one line"},
+		{file: write("wrapped.csv", "1221,64496\n64497,64498\n"), wantErr: "wrapped.csv:1: several ASNs"},
+		{file: write("junk.txt", "1221\nTelstra\n64496\n"), wantErr: "junk.txt:2: invalid asn"},
+		{file: write("stray.txt", "error_fetching_list\n1221,64496\n"), wantErr: "stray.txt:1: invalid asn"},
+		{file: write("typo.txt", "AS-1221\n64496\n"), wantErr: "typo.txt:1: invalid asn"},
+		{file: write("gap2.txt", "AS 1221\n64496\n"), wantErr: "gap2.txt:1: invalid asn"},
+		{file: write("zero.json", `{"asn":1221}`+"\n"+`{"asn":0}`+"\n"), wantErr: "zero.json:2: invalid asn 0"},
+
+		// Other kinds of file, named in the error.
+		{file: write("ips.txt", "1.2.3.0/24\n"), wantErr: "IP address or network"},
+		{file: write("nro.txt", "2.3|nro|20261101|1\nnro|US|asn|1221|1|20010920|assigned\n"), wantErr: "RIR/NRO"},
+		{file: write("pretty.json", "{\n  \"asn\": 1221\n}\n"), wantErr: "one JSON object per line"},
+		{file: write("long.txt", strings.Repeat("x", 70000)+"\n1221\n"), wantErr: "long.txt:1: line longer than 64 KiB"},
 	} {
 		m := MatchGeoIPASN{DB: asnDB, ASNs: tc.inline, ASNFile: tc.file}
 		err := m.Provision(caddy.Context{})
@@ -262,4 +294,31 @@ func TestASNFile(t *testing.T) {
 			t.Errorf("%s: expected %v, got %v", tc.remoteAddr, tc.want, got)
 		}
 	}
+}
+
+// FuzzReadASNFile checks the parser never panics, and that whatever it
+// loads is the decimal form of an ASN from 1 to 4294967295.
+func FuzzReadASNFile(f *testing.F) {
+	for _, seed := range []string{
+		"1221\n64496\n", "ASN,Entity\n1221,Telstra\n", "{\"asn\":1221}\n", "AS1221 AS64496\n",
+		"# c\n; c\n// c\n", "\ufeff1221\r\n", "2.3|nro|1|2\n", "\x00",
+	} {
+		f.Add([]byte(seed))
+	}
+	f.Fuzz(func(t *testing.T, body []byte) {
+		path := filepath.Join(t.TempDir(), "in")
+		if err := os.WriteFile(path, body, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		set := map[string]struct{}{}
+		if err := readASNFile(path, set); err != nil {
+			return
+		}
+		for k := range set {
+			n, err := strconv.ParseUint(k, 10, 32)
+			if err != nil || n == 0 || strconv.FormatUint(n, 10) != k {
+				t.Fatalf("bad key %q", k)
+			}
+		}
+	})
 }

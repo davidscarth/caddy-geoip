@@ -79,11 +79,13 @@ geolocation matchers.
   code: `country US` with `subdivision CA` is how `US-CA` is written.
 - **asn** - autonomous system numbers as plain integers, no `AS` prefix.
 - **asn_file** - path to a file of autonomous system numbers, one per line,
-  added to any `asn` list. The number comes first, `AS` prefix or not, and the
-  rest of the line is ignored, so plain numbers, numbers with names, CSV, and
-  Spamhaus ASN-DROP all load as published. Blank lines, comments, and headers
-  are skipped, a bad line, a file over 64 MiB, or binary data is an error at
-  load. Placeholders are resolved.
+  added to any `asn` list. The number comes first, `AS` prefix or not, and
+  anything after a space, tab, comma, or semicolon is ignored, so plain
+  numbers, numbers with names, CSV, and Spamhaus ASN-DROP all load as
+  published. Blank lines, `#`, `;`, and `//` comments, and a header on the
+  first line are skipped. A line that doesn't start with a number is an error
+  at load naming the file and line, as are several ASNs on one line, a file
+  over 64 MiB, and binary data. Placeholders are resolved.
 - **type** - kinds of anonymizer to match, any of `anonymous`, `vpn`, `tor`,
   `hosting`, `public_proxy`, `residential_proxy`. These are MaxMind's
   Anonymous IP flags (`anonymous` is the umbrella, set whenever any other is).

@@ -5,12 +5,15 @@ package caddygeoip
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/netip"
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/oschwald/maxminddb-golang/v2"
 
@@ -35,8 +38,9 @@ type MatchGeoIPASN struct {
 	ASNs []uint32 `json:"asns,omitempty"`
 
 	// Path to a file of autonomous system numbers to match, one per
-	// line with or without an AS prefix, or Spamhaus ASN-DROP in its
-	// JSON lines form. Combined with ASNs. Supports placeholders.
+	// line with or without an AS prefix, optionally followed by a name
+	// or CSV columns, or Spamhaus ASN-DROP in its JSON lines form.
+	// Combined with ASNs. Supports placeholders.
 	ASNFile string `json:"asn_file,omitempty"`
 
 	// Whether an IP the database has no entry for (loopback, private
@@ -56,10 +60,11 @@ func (MatchGeoIPASN) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
-// Provision builds the ASN set and opens the database. A missing db
-// is left for Validate to report.
+// Provision builds the ASN set and opens the database. A missing db,
+// or no asn and no asn_file, is left for Validate to report, so the
+// database isn't opened for a config that is about to be refused.
 func (m *MatchGeoIPASN) Provision(caddy.Context) error {
-	if m.DB == "" {
+	if m.DB == "" || (len(m.ASNs) == 0 && m.ASNFile == "") {
 		return nil
 	}
 	// The set is keyed by the decimal form so the request path can
@@ -92,18 +97,20 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 	return nil
 }
 
-// readASNFile adds the autonomous system numbers in the file at path
-// to the set. A line starts with the number, with or without an AS
-// prefix, followed by nothing or by a space, tab, comma, semicolon, or
-// comment and anything after that (a name, a column), which covers
-// plain lists, "AS1234 Name" lists, and CSV. A line that is a JSON
-// object is read as Spamhaus ASN-DROP writes them, by its "asn"
-// member. Blank lines, comments, lines with no digits at all (a CSV
-// header), and JSON lines without an "asn" member (ASN-DROP's metadata
-// line) are skipped. The file must yield at least one number. It is
-// read a line at a time, so only the numbers are held in memory. An
-// empty path, a file over 64 MiB, or a line holding binary data (a
-// database given in place of a list) is refused.
+// readASNFile adds the autonomous system numbers in the file at path to
+// set, keyed by their decimal form. The path may hold placeholders.
+//
+// A line holds one ASN, with or without an AS prefix, optionally followed
+// by a space, tab, comma, or semicolon and anything after it (a name, CSV
+// columns). A line may instead be a JSON object, read by its "asn" member
+// as Spamhaus ASN-DROP publishes them; an object without one is skipped.
+// Blank lines, lines starting with ; or //, and anything after # are
+// ignored, and the first line may be a CSV header.
+//
+// Anything else is refused with its line number, as is a line of several
+// different ASNs, which would otherwise load only the first. The file must
+// be UTF-8 text of at most 64 MiB, pipes included, with lines under 64 KiB
+// and at least one ASN.
 func readASNFile(path string, set map[string]struct{}) error {
 	path = caddy.NewReplacer().ReplaceAll(path, "")
 	if path == "" {
@@ -114,62 +121,125 @@ func readASNFile(path string, set map[string]struct{}) error {
 		return fmt.Errorf("asn_file: %w", err)
 	}
 	defer f.Close()
-	if info, err := f.Stat(); err != nil {
-		return fmt.Errorf("asn_file: %w", err)
-	} else if info.Size() > 64<<20 {
-		return fmt.Errorf("asn_file: %s: %d bytes, too large to be a list", path, info.Size())
+	if info, err := f.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > 64<<20 {
+		return fmt.Errorf("asn_file: %s: %d bytes, too large to be a list (64 MiB at most)", path, info.Size())
 	}
-	found, line := 0, 0
-	sc := bufio.NewScanner(f)
+	fail := func(line int, format string, a ...any) error {
+		return fmt.Errorf("asn_file: %s:%d: %s", path, line, fmt.Sprintf(format, a...))
+	}
+
+	// Pipes and devices have no size to check. One byte past the limit tells
+	// a file at the limit from a larger one, which LimitReader alone would
+	// silently truncate.
+	lr := &io.LimitedReader{R: f, N: 64<<20 + 1}
+	sc := bufio.NewScanner(lr)
+	sep := func(r rune) bool { return r == ' ' || r == '\t' || r == ',' || r == ';' }
+	found, line, header := 0, 0, false
 	for sc.Scan() {
 		line++
-		text := strings.TrimSpace(strings.TrimPrefix(sc.Text(), "\ufeff")) // Windows editors write a byte order mark
-		if strings.IndexByte(text, 0) >= 0 {
-			return fmt.Errorf("asn_file: %s: binary data or UTF-16, not a UTF-8 list", path)
-		}
-		if text == "" || text[0] == '#' {
-			continue
+		text := strings.TrimSpace(strings.TrimPrefix(sc.Text(), "\uFEFF"))
+		if strings.IndexByte(text, 0) >= 0 || !utf8.ValidString(text) {
+			return fail(line, "binary data or UTF-16, not a UTF-8 list")
 		}
 		var n uint64
-		if text[0] == '{' {
+		if strings.HasPrefix(text, "{") {
 			var rec struct {
-				ASN uint32 `json:"asn"`
+				ASN *uint32 `json:"asn"`
 			}
 			if err := json.Unmarshal([]byte(text), &rec); err != nil {
-				return fmt.Errorf("asn_file: %s:%d: %w", path, line, err)
+				return fail(line, "%v (asn_file takes one JSON object per line)", err)
 			}
-			if rec.ASN == 0 {
+			if rec.ASN == nil {
+				continue // metadata, such as ASN-DROP's first line
+			}
+			if n = uint64(*rec.ASN); n == 0 {
+				return fail(line, "invalid asn 0")
+			}
+		} else if strings.HasPrefix(text, ";") || strings.HasPrefix(text, "//") {
+			continue // comment line; a later // or ; just starts more ignored fields
+		} else {
+			text, _, _ = strings.Cut(text, "#")
+			fields := strings.FieldsFunc(text, sep)
+			if len(fields) == 0 {
 				continue
 			}
-			n = uint64(rec.ASN)
-		} else {
-			if !strings.ContainsAny(text, "0123456789") {
-				continue // a header or label line
+			first := strings.Trim(fields[0], `"`)
+			var ok bool
+			if n, ok = parseASN(first); !ok {
+				switch {
+				case found == 0 && !header && isHeader(fields):
+					header = true // only the first column counts from here
+					continue
+				case strings.Count(first, "|") >= 3:
+					return fail(line, "an RIR/NRO delegated statistics file, not a list; filter it to the ASNs you want, one per line")
+				case isAddress(first):
+					return fail(line, "%.60q is an IP address or network; asn_file takes AS numbers", first)
+				}
+				return fail(line, "invalid asn %.60q", first)
 			}
-			num := text
-			if len(num) > 2 && strings.EqualFold(num[:2], "AS") {
-				num = num[2:]
+			// Without a header, a line whose other fields are all ASNs, not
+			// all this one (AS5567 AS5567 is a name), is a list on one line.
+			several, same := !header && len(fields) > 1, true
+			for _, f := range fields[1:] {
+				m, ok := parseASN(strings.Trim(f, `"`))
+				several, same = several && ok, same && m == n
 			}
-			end := strings.IndexFunc(num, func(r rune) bool { return r < '0' || r > '9' })
-			if end < 0 {
-				end = len(num)
-			} else if !strings.ContainsRune(" \t,;#", rune(num[end])) {
-				end = 0
-			}
-			if n, err = strconv.ParseUint(num[:end], 10, 32); err != nil || n == 0 {
-				return fmt.Errorf("asn_file: %s:%d: invalid asn %q", path, line, text)
+			if several && !same {
+				return fail(line, "several ASNs on one line, put one per line")
 			}
 		}
 		set[strconv.FormatUint(n, 10)] = struct{}{}
 		found++
 	}
-	if err := sc.Err(); err != nil {
-		return fmt.Errorf("asn_file: %s: %w", path, err)
-	}
-	if found == 0 {
+	switch {
+	case lr.N == 0:
+		return fmt.Errorf("asn_file: %s: too large to be a list (64 MiB at most)", path)
+	case errors.Is(sc.Err(), bufio.ErrTooLong):
+		return fail(line+1, "line longer than 64 KiB; binary data or not a list")
+	case sc.Err() != nil:
+		return fail(line+1, "%v", sc.Err())
+	case found == 0:
 		return fmt.Errorf("asn_file: %s: no autonomous system numbers found", path)
 	}
 	return nil
+}
+
+// parseASN parses an AS number from 1 to 4294967295 in asplain form
+// (RFC 5396), with or without an AS prefix. In base 10, ParseUint
+// refuses signs, spaces, and underscores.
+func parseASN(s string) (uint64, bool) {
+	if len(s) > 2 && strings.EqualFold(s[:2], "AS") {
+		s = s[2:]
+	}
+	n, err := strconv.ParseUint(s, 10, 32)
+	return n, err == nil && n != 0
+}
+
+// isHeader reports whether the fields of a first line are CSV column names:
+// the first starts with a letter and has no digits or colons, so ASN1221,
+// AS-1221, and IPv6 addresses aren't taken for one, and no other field is
+// an ASN, so neither is AS 1221. A single word must name the column (asn or
+// as_number), so a stray word can't turn off the several-ASNs check.
+func isHeader(fields []string) bool {
+	first := strings.Trim(fields[0], `"`)
+	if first == "" || first[0]|0x20 < 'a' || first[0]|0x20 > 'z' || strings.ContainsAny(first, "0123456789:") {
+		return false
+	}
+	if len(fields) == 1 {
+		return strings.EqualFold(first, "asn") || strings.EqualFold(first, "as_number")
+	}
+	for _, f := range fields[1:] {
+		if _, ok := parseASN(strings.Trim(f, `"`)); ok {
+			return false
+		}
+	}
+	return true
+}
+
+func isAddress(s string) bool {
+	_, err1 := netip.ParsePrefix(s)
+	_, err2 := netip.ParseAddr(s)
+	return err1 == nil || err2 == nil
 }
 
 // Validate ensures the configuration is usable.
@@ -256,7 +326,7 @@ func (m *MatchGeoIPASN) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 				for _, a := range args {
 					n, err := strconv.ParseUint(a, 10, 32)
-					if err != nil {
+					if err != nil || n == 0 {
 						return d.Errf("invalid asn %q", a)
 					}
 					m.ASNs = append(m.ASNs, uint32(n))

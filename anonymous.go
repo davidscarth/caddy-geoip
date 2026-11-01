@@ -99,9 +99,10 @@ func (MatchGeoIPAnonymous) CaddyModule() caddy.ModuleInfo {
 }
 
 // Provision builds the kind mask and opens the database. A missing db
-// is left for Validate to report.
+// or type is left for Validate to report, so the database isn't opened
+// for a config that is about to be refused.
 func (m *MatchGeoIPAnonymous) Provision(caddy.Context) error {
-	if m.DB == "" {
+	if m.DB == "" || len(m.Types) == 0 {
 		return nil
 	}
 	for _, t := range m.Types {
