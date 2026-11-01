@@ -51,7 +51,7 @@ Requires Go 1.26.0 or later to build.
 @name geoip_asn {
 	db <path>
 	asn <numbers...>
-	asn_file <path>
+	asn_file <paths...>
 	match_unknown
 }
 
@@ -78,14 +78,14 @@ geolocation matchers.
   `US-CA`), case-insensitive. Together with **country** they represent the full
   code: `country US` with `subdivision CA` is how `US-CA` is written.
 - **asn** - autonomous system numbers as plain integers, no `AS` prefix.
-- **asn_file** - path to a file of autonomous system numbers, one per line,
-  added to any `asn` list. The number comes first, `AS` prefix or not, and
-  anything after a space, tab, comma, or semicolon is ignored, so plain
-  numbers, numbers with names, CSV, and Spamhaus ASN-DROP all load as
-  published. Blank lines, `#`, `;`, and `//` comments, and a header on the
-  first line are skipped. A line that doesn't start with a number is an error
-  at load naming the file and line, as are several ASNs on one line, a file
-  over 64 MiB, and binary data. Placeholders are resolved.
+- **asn_file** - one or more files of autonomous system numbers, added to any
+  `asn` list. Several paths can go on one `asn_file` line, or on separate
+  lines. Files are UTF-8 text with one ASN per line, with or without `AS` in
+  front. Anything after a space, tab, comma, or semicolon is ignored, so a
+  list with names or a CSV loads as published. Spamhaus ASN-DROP's JSON lines
+  load too. Blank lines and `#`, `;`, and `//` comments are skipped, and so is
+  a header on the first line of each file. A file that doesn't follow these
+  rules will return an error and fail to load.
 - **type** - kinds of anonymizer to match, any of `anonymous`, `vpn`, `tor`,
   `hosting`, `public_proxy`, `residential_proxy`. These are MaxMind's
   Anonymous IP flags (`anonymous` is the umbrella, set whenever any other is).
@@ -242,7 +242,7 @@ abort @anon
 
 #### Combine
 
-Matchers inside one named matcher are ANDed, so "Russia, except
+Different matchers inside one named matcher are ANDed, so "Russia, except
 this network" is a single condition rather than two rules that need ordering:
 
 ```caddyfile
@@ -258,6 +258,11 @@ this network" is a single condition rather than two rules that need ordering:
 }
 abort @blocked
 ```
+
+Two blocks of the same matcher in one named matcher are not ANDed: Caddy
+merges them into one block before the plugin sees them, so their lists add up
+(any of the countries, any of the ASN files) and a `db` given in both is
+refused. Put the values in one block.
 
 Two separate `abort` lines are both denies and combine as OR in any order.
 An exception must be written inside one matcher, as above, because nothing
@@ -341,7 +346,7 @@ one to run wins.
   "geoip_asn": {
     "db": "/usr/share/GeoIP/GeoLite2-ASN.mmdb",
     "asns": [16509],
-    "asn_file": "/etc/caddy/asndrop.json"
+    "asn_files": ["/etc/caddy/asndrop.json"]
   },
   "geoip_anonymous": {
     "db": "/usr/share/GeoIP/GeoIP2-Anonymous-IP.mmdb",

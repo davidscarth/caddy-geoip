@@ -37,11 +37,12 @@ type MatchGeoIPASN struct {
 	// Autonomous system numbers to match.
 	ASNs []uint32 `json:"asns,omitempty"`
 
-	// Path to a file of autonomous system numbers to match, one per
+	// Paths to files of autonomous system numbers to match, one per
 	// line with or without an AS prefix, optionally followed by a name
-	// or CSV columns, or Spamhaus ASN-DROP in its JSON lines form.
-	// Combined with ASNs. Supports placeholders.
-	ASNFile string `json:"asn_file,omitempty"`
+	// or CSV columns, or Spamhaus ASN-DROP in its JSON lines form. Each
+	// file is read on its own and must hold at least one ASN. Combined
+	// with ASNs. Supports placeholders.
+	ASNFiles []string `json:"asn_files,omitempty"`
 
 	// Whether an IP the database has no entry for (loopback, private
 	// ranges, unallocated space) matches. Default: false.
@@ -64,7 +65,7 @@ func (MatchGeoIPASN) CaddyModule() caddy.ModuleInfo {
 // or no asn and no asn_file, is left for Validate to report, so the
 // database isn't opened for a config that is about to be refused.
 func (m *MatchGeoIPASN) Provision(caddy.Context) error {
-	if m.DB == "" || (len(m.ASNs) == 0 && m.ASNFile == "") {
+	if m.DB == "" || (len(m.ASNs) == 0 && len(m.ASNFiles) == 0) {
 		return nil
 	}
 	// The set is keyed by the decimal form so the request path can
@@ -77,8 +78,8 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 		}
 		m.asns[strconv.FormatUint(uint64(n), 10)] = struct{}{}
 	}
-	if m.ASNFile != "" {
-		if err := readASNFile(m.ASNFile, m.asns); err != nil {
+	for _, path := range m.ASNFiles {
+		if err := readASNFile(path, m.asns); err != nil {
 			return err
 		}
 	}
@@ -103,7 +104,7 @@ func (m *MatchGeoIPASN) Provision(caddy.Context) error {
 // A line holds one ASN, with or without an AS prefix, optionally followed
 // by a space, tab, comma, or semicolon and anything after it (a name, CSV
 // columns). A line may instead be a JSON object, read by its "asn" member
-// as Spamhaus ASN-DROP publishes them; an object without one is skipped.
+// as Spamhaus ASN-DROP publishes them, and an object without one is skipped.
 // Blank lines, lines starting with ; or //, and anything after # are
 // ignored, and the first line may be a CSV header.
 //
@@ -156,7 +157,7 @@ func readASNFile(path string, set map[string]struct{}) error {
 				return fail(line, "invalid asn 0")
 			}
 		} else if strings.HasPrefix(text, ";") || strings.HasPrefix(text, "//") {
-			continue // comment line; a later // or ; just starts more ignored fields
+			continue // a comment line. Later in a line, // and ; start ignored fields.
 		} else {
 			text, _, _ = strings.Cut(text, "#")
 			fields := strings.FieldsFunc(text, sep)
@@ -171,9 +172,9 @@ func readASNFile(path string, set map[string]struct{}) error {
 					header = true // only the first column counts from here
 					continue
 				case strings.Count(first, "|") >= 3:
-					return fail(line, "an RIR/NRO delegated statistics file, not a list; filter it to the ASNs you want, one per line")
+					return fail(line, "an RIR/NRO delegated statistics file, not a list (filter it to the ASNs you want, one per line)")
 				case isAddress(first):
-					return fail(line, "%.60q is an IP address or network; asn_file takes AS numbers", first)
+					return fail(line, "%.60q is an IP address or network, not an AS number", first)
 				}
 				return fail(line, "invalid asn %.60q", first)
 			}
@@ -195,7 +196,7 @@ func readASNFile(path string, set map[string]struct{}) error {
 	case lr.N == 0:
 		return fmt.Errorf("asn_file: %s: too large to be a list (64 MiB at most)", path)
 	case errors.Is(sc.Err(), bufio.ErrTooLong):
-		return fail(line+1, "line longer than 64 KiB; binary data or not a list")
+		return fail(line+1, "line longer than 64 KiB (binary data, or not a list)")
 	case sc.Err() != nil:
 		return fail(line+1, "%v", sc.Err())
 	case found == 0:
@@ -247,8 +248,8 @@ func (m *MatchGeoIPASN) Validate() error {
 	if m.DB == "" {
 		return fmt.Errorf("db is required")
 	}
-	if len(m.ASNs) == 0 && m.ASNFile == "" {
-		return fmt.Errorf("at least one asn or an asn_file is required")
+	if len(m.ASNs) == 0 && len(m.ASNFiles) == 0 {
+		return fmt.Errorf("at least one asn or asn_file is required")
 	}
 	return nil
 }
@@ -301,7 +302,7 @@ func (m *MatchGeoIPASN) asnOf(ip netip.Addr) (string, error) {
 //	geoip_asn {
 //	    db       <path>
 //	    asn      <numbers...>
-//	    asn_file <path>
+//	    asn_file <paths...>
 //	    match_unknown
 //	}
 func (m *MatchGeoIPASN) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
@@ -332,12 +333,13 @@ func (m *MatchGeoIPASN) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					m.ASNs = append(m.ASNs, uint32(n))
 				}
 			case "asn_file":
-				if m.ASNFile != "" {
-					return d.Err("asn_file already specified")
-				}
-				if !d.AllArgs(&m.ASNFile) {
+				// Any number of paths, and the line may repeat: each
+				// file is read on its own into the same set.
+				args := d.RemainingArgs()
+				if len(args) == 0 {
 					return d.ArgErr()
 				}
+				m.ASNFiles = append(m.ASNFiles, args...)
 			case "match_unknown":
 				if d.NextArg() {
 					return d.ArgErr()

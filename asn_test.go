@@ -3,8 +3,10 @@
 package caddygeoip
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -17,7 +19,7 @@ func TestASNUnmarshalCaddyfile(t *testing.T) {
 	for i, tc := range []struct {
 		input       string
 		wantASNs    int
-		wantFile    string
+		wantFiles   []string
 		wantUnknown bool
 		wantErr     bool
 	}{
@@ -106,7 +108,7 @@ func TestASNUnmarshalCaddyfile(t *testing.T) {
 				db       /tmp/ASN.mmdb
 				asn_file /tmp/asndrop.json
 			}`,
-			wantFile: "/tmp/asndrop.json",
+			wantFiles: []string{"/tmp/asndrop.json"},
 		},
 		{
 			input: `geoip_asn {
@@ -114,16 +116,30 @@ func TestASNUnmarshalCaddyfile(t *testing.T) {
 				asn      16509
 				asn_file /tmp/asndrop.json
 			}`,
-			wantASNs: 1,
-			wantFile: "/tmp/asndrop.json",
+			wantASNs:  1,
+			wantFiles: []string{"/tmp/asndrop.json"},
 		},
+		// Several files on one line, the line repeated, and a quoted path
+		// with a space, all collected in order.
+		{
+			input: `geoip_asn {
+				db       /tmp/ASN.mmdb
+				asn_file /tmp/a.json /tmp/b.csv
+				asn_file "/tmp/my list.txt"
+			}`,
+			wantFiles: []string{"/tmp/a.json", "/tmp/b.csv", "/tmp/my list.txt"},
+		},
+		// Two blocks in one named matcher reach the matcher as one, so
+		// their files add up.
 		{
 			input: `geoip_asn {
 				db       /tmp/ASN.mmdb
 				asn_file /tmp/a.txt
+			}
+			geoip_asn {
 				asn_file /tmp/b.txt
 			}`,
-			wantErr: true,
+			wantFiles: []string{"/tmp/a.txt", "/tmp/b.txt"},
 		},
 		{
 			input: `geoip_asn {
@@ -148,8 +164,8 @@ func TestASNUnmarshalCaddyfile(t *testing.T) {
 		if len(m.ASNs) != tc.wantASNs {
 			t.Errorf("Test %d: expected %d asns, got %d", i, tc.wantASNs, len(m.ASNs))
 		}
-		if m.ASNFile != tc.wantFile {
-			t.Errorf("Test %d: expected asn_file %q, got %q", i, tc.wantFile, m.ASNFile)
+		if !slices.Equal(m.ASNFiles, tc.wantFiles) {
+			t.Errorf("Test %d: expected asn_file %q, got %q", i, tc.wantFiles, m.ASNFiles)
 		}
 		if m.MatchUnknown != tc.wantUnknown {
 			t.Errorf("Test %d: expected match_unknown=%v, got %v", i, tc.wantUnknown, m.MatchUnknown)
@@ -165,7 +181,7 @@ func TestASNValidate(t *testing.T) {
 		{m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb", ASNs: []uint32{16509}}},
 		{m: MatchGeoIPASN{ASNs: []uint32{16509}}, wantErr: true},
 		{m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb"}, wantErr: true},
-		{m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb", ASNFile: "/tmp/asndrop.json"}},
+		{m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb", ASNFiles: []string{"/tmp/asndrop.json"}}},
 	} {
 		err := tc.m.Validate()
 		if tc.wantErr && err == nil {
@@ -253,7 +269,7 @@ func TestASNFile(t *testing.T) {
 		{file: write("pretty.json", "{\n  \"asn\": 1221\n}\n"), wantErr: "one JSON object per line"},
 		{file: write("long.txt", strings.Repeat("x", 70000)+"\n1221\n"), wantErr: "long.txt:1: line longer than 64 KiB"},
 	} {
-		m := MatchGeoIPASN{DB: asnDB, ASNs: tc.inline, ASNFile: tc.file}
+		m := MatchGeoIPASN{DB: asnDB, ASNs: tc.inline, ASNFiles: []string{tc.file}}
 		err := m.Provision(caddy.Context{})
 		if tc.wantErr != "" {
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
@@ -275,7 +291,7 @@ func TestASNFile(t *testing.T) {
 
 	// The set from a file matches like one written inline: AS1221 is in
 	// the test database, AS64496 is not.
-	m := MatchGeoIPASN{DB: asnDB, ASNFile: spamhaus}
+	m := MatchGeoIPASN{DB: asnDB, ASNFiles: []string{spamhaus}}
 	if err := m.Provision(caddy.Context{}); err != nil {
 		t.Fatal(err)
 	}
@@ -293,6 +309,41 @@ func TestASNFile(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("%s: expected %v, got %v", tc.remoteAddr, tc.want, got)
 		}
+	}
+}
+
+// TestASNFiles loads four lists in four forms into one matcher, and
+// checks that one empty file among them fails the load by name rather
+// than passing on the strength of the others.
+func TestASNFiles(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	files := []string{
+		write("drop.json", `{"type":"metadata"}`+"\n"+`{"asn":1221}`+"\n"),
+		write("hosting.csv", "ASN,Entity\n64496,Example\n1221,Telstra\n"),
+		write("plain.txt", "64497\n64498\n"),
+		write("named.txt", "# vpn\nAS64499 Example VPN\n64500 // other\n"),
+	}
+	m := MatchGeoIPASN{DB: asnDB, ASNFiles: files}
+	if err := m.Provision(caddy.Context{}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"1221", "64496", "64497", "64498", "64499", "64500"}
+	if got := slices.Sorted(maps.Keys(m.asns)); !slices.Equal(got, want) {
+		t.Errorf("expected %v, got %v", want, got)
+	}
+
+	empty := write("empty.txt", "# fetch failed\n")
+	m = MatchGeoIPASN{DB: asnDB, ASNFiles: append(files, empty)}
+	err := m.Provision(caddy.Context{})
+	if err == nil || !strings.Contains(err.Error(), "empty.txt") {
+		t.Errorf("expected the empty file to fail the load by name, got %v", err)
 	}
 }
 
