@@ -18,10 +18,9 @@ func init() {
 	caddy.RegisterModule(MatchGeoIPAnonymous{})
 }
 
-// MatchGeoIPAnonymous is a small, fast, and safe GeoIP matcher using
-// MaxMind-compatible databases. It matches requests from known
-// anonymizers, such as VPNs, Tor exit nodes, and hosting providers,
-// and sets {geoip.anonymous}.
+// MatchGeoIPAnonymous matches VPNs, Tor, proxies, and hosting providers
+// using MaxMind-compatible GeoIP databases: a small, fast, and safe
+// geolocation matcher. It sets {geoip.anonymous}.
 //
 // An address the database does not flag is just not anonymous, so there
 // is no match_unknown.

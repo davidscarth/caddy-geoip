@@ -2,16 +2,16 @@
 
 // Package caddygeoip provides small, fast, and safe GeoIP geolocation
 // matchers for Caddy, using MaxMind-compatible databases: country,
-// subdivision, and autonomous system (ASN).
+// subdivision, autonomous system (ASN), and anonymizer.
 //
 // The matchers only match. Blocking, allowing, routing, logging, and
 // exemptions are written with Caddy's own directives. Each lookup reads
-// one field from a memory-mapped database, with no locks and no
-// per-request caching. The client IP is the one Caddy verified through
-// trusted_proxies; a request in TLS early data is refused until the
-// handshake completes. A bad configuration is rejected when the config
-// loads and a failed lookup stops the request rather than letting it
-// through. The only dependencies are Caddy and maxminddb-golang.
+// only the fields its matcher needs from a memory-mapped database, with
+// no locks and no per-request caching. The client IP is the one Caddy
+// verified through trusted_proxies; a request in TLS early data is
+// refused until the handshake completes. A bad configuration is rejected
+// when the config loads and a failed lookup stops the request rather than
+// letting it through. The only dependencies are Caddy and maxminddb-golang.
 package caddygeoip
 
 import (
@@ -82,9 +82,7 @@ const lastRFC3339 = 253402300799
 // logDBAge logs one line about a database that loaded: INFO with its build
 // date and age, WARN when it was built more than 30 days before now, or
 // WARN when the build date is missing or in the future, since its age is
-// then unknown. The file's modified time is not used in place of a missing
-// build date: a copy can carry the copy time, the source's time, or a
-// placeholder, none of which says when the data was built.
+// then unknown.
 func logDBAge(logger *slog.Logger, path string, md maxminddb.Metadata, now time.Time) {
 	where := []any{slog.String("path", path), slog.String("type", md.DatabaseType)}
 	if md.BuildEpoch == 0 || md.BuildEpoch > uint(now.Unix()) {

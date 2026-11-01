@@ -28,10 +28,10 @@ func init() {
 	caddy.RegisterModule(MatchGeoIPASN{})
 }
 
-// MatchGeoIPASN is a small, fast, and safe GeoIP geolocation matcher
-// using MaxMind-compatible databases. It matches requests by the
-// client's network (autonomous system), such as a hosting provider or
-// ISP, and sets {geoip.asn}.
+// MatchGeoIPASN matches requests by the client's network (ASN) using
+// MaxMind-compatible GeoIP databases: a small, fast, and safe geolocation
+// matcher. The network is the client's autonomous system, such as a
+// hosting provider or ISP. It sets {geoip.asn}.
 type MatchGeoIPASN struct {
 	// Path to an ASN, ISP, or Enterprise database. Supports placeholders.
 	DB string `json:"db,omitempty"`

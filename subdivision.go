@@ -20,10 +20,9 @@ func init() {
 	caddy.RegisterModule(MatchGeoIPSubdivision{})
 }
 
-// MatchGeoIPSubdivision is a small, fast, and safe GeoIP geolocation
-// matcher using MaxMind-compatible databases. It matches requests by
-// state, province, or region within a country and sets {geoip.country}
-// and {geoip.subdivision}.
+// MatchGeoIPSubdivision matches requests by state, province, or region
+// using MaxMind-compatible GeoIP databases: a small, fast, and safe
+// geolocation matcher. It sets {geoip.country} and {geoip.subdivision}.
 //
 // The country is required because subdivision codes are only unique
 // within a country: CA is California in the United States and a valid
