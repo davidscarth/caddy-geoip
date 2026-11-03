@@ -196,7 +196,7 @@ func (p *place) subdivisions(c mmdbdata.Cursor) (mmdbdata.Cursor, error) {
 		}
 		if code != "" {
 			p.subdivision = code
-			if _, ok := p.in[strings.ToUpper(code)]; ok {
+			if _, found := p.in[strings.ToUpper(code)]; found {
 				p.matched = true
 			}
 		}

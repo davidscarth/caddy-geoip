@@ -403,3 +403,102 @@ func TestLogListAge(t *testing.T) {
 		}
 	}
 }
+
+// TestASNProvisionRejects covers the one value the type can hold but the
+// domain cannot. Everything else is rejected at Caddyfile parse time or
+// by the JSON decoder, which does not accept strings or negatives.
+func TestASNProvisionRejects(t *testing.T) {
+	m := MatchGeoIPASN{DB: asnDB, ASNs: []uint32{0}}
+	if err := m.Provision(caddy.Context{}); err == nil {
+		t.Error("expected provision to reject asn 0")
+	}
+}
+
+func TestASNMatch(t *testing.T) {
+	m := MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}}
+
+	// Caddy provisions before it validates.
+	if err := m.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	if err := m.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+
+	for i, tc := range []struct {
+		remoteAddr string
+		want       bool
+	}{
+		{"1.128.0.1:1234", true},      // AS1221
+		{"[2001:8000::1]:1234", true}, // AS1221 over native IPv6
+		{"10.1.2.3:1234", false},      // private, no record
+		{"8.8.8.8:1234", false},       // not in the test db
+	} {
+		got, err := m.MatchWithError(newRequest(tc.remoteAddr))
+		if err != nil {
+			t.Errorf("Test %d: unexpected error: %v", i, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("Test %d: %s: MatchWithError() = %v, want %v", i, tc.remoteAddr, got, tc.want)
+		}
+	}
+}
+
+// TestASNAcrossDatabaseEditions checks the three editions the ASN
+// matcher accepts. Enterprise nests the autonomous system fields under
+// traits, so reading the top-level path there would match nothing at
+// all, silently.
+func TestASNAcrossDatabaseEditions(t *testing.T) {
+	for _, tc := range []struct {
+		name, db, addr string
+		asn            uint32
+	}{
+		{"GeoLite2-ASN", asnDB, "1.128.0.1:1234", 1221},
+		{"GeoIP2-ISP", ispDB, "1.128.0.1:1234", 1221},
+		{"GeoIP2-Enterprise", entDB, "74.209.24.1:1234", 14671},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := MatchGeoIPASN{DB: tc.db, ASNs: []uint32{tc.asn}}
+			if err := m.Provision(caddy.Context{}); err != nil {
+				t.Fatalf("provision: %v", err)
+			}
+
+			r := newRequest(tc.addr)
+			got, err := m.MatchWithError(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !got {
+				t.Errorf("expected AS%d to match", tc.asn)
+			}
+			want := strconv.FormatUint(uint64(tc.asn), 10)
+			repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+			if v := repl.ReplaceAll("{geoip.asn}", ""); v != want {
+				t.Errorf("{geoip.asn} = %q, want %s", v, want)
+			}
+		})
+	}
+}
+
+func TestASNMatchUnknownAndPlaceholder(t *testing.T) {
+	// match_unknown and the placeholder name are separate lines in
+	// asn.go from the country matcher's, so they are checked here too.
+	m := MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}, MatchUnknown: true}
+	if err := m.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+
+	if got, _ := m.MatchWithError(newRequest("10.1.2.3:1234")); !got {
+		t.Error("expected an IP with no ASN record to match with match_unknown")
+	}
+
+	r := newRequest("1.128.0.1:1234")
+	if _, err := m.MatchWithError(r); err != nil {
+		t.Fatal(err)
+	}
+	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+	if got := repl.ReplaceAll("{geoip.asn}", ""); got != "1221" {
+		t.Errorf("{geoip.asn} = %q, want 1221", got)
+	}
+}
