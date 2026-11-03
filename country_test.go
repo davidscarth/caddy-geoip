@@ -67,7 +67,7 @@ func TestCountryUnmarshalCaddyfile(t *testing.T) {
 		err := m.UnmarshalCaddyfile(caddyfile.NewTestDispenser(tc.input))
 		if tc.wantErr {
 			if err == nil {
-				t.Errorf("Test %d: expected error but got none", i)
+				t.Errorf("Test %d: UnmarshalCaddyfile() error = nil, want error", i)
 			}
 			continue
 		}
@@ -76,13 +76,13 @@ func TestCountryUnmarshalCaddyfile(t *testing.T) {
 			continue
 		}
 		if m.DB != tc.wantDB {
-			t.Errorf("Test %d: expected db %q, got %q", i, tc.wantDB, m.DB)
+			t.Errorf("Test %d: db = %q, want %q", i, m.DB, tc.wantDB)
 		}
 		if len(m.Countries) != tc.wantCountries {
-			t.Errorf("Test %d: expected %d countries, got %d", i, tc.wantCountries, len(m.Countries))
+			t.Errorf("Test %d: got %d countries, want %d", i, len(m.Countries), tc.wantCountries)
 		}
 		if m.MatchUnknown != tc.wantUnknown {
-			t.Errorf("Test %d: expected match_unknown=%v, got %v", i, tc.wantUnknown, m.MatchUnknown)
+			t.Errorf("Test %d: match_unknown = %v, want %v", i, m.MatchUnknown, tc.wantUnknown)
 		}
 	}
 }
@@ -119,7 +119,7 @@ func TestCountryValidate(t *testing.T) {
 	} {
 		err := tc.m.Validate()
 		if tc.wantErr && err == nil {
-			t.Errorf("Test %d: expected error but got none", i)
+			t.Errorf("Test %d: Validate() error = nil, want error", i)
 		}
 		if !tc.wantErr && err != nil {
 			t.Errorf("Test %d: unexpected error: %v", i, err)

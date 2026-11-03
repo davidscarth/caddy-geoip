@@ -95,7 +95,7 @@ func TestModuleIDs(t *testing.T) {
 	} {
 		info := m.CaddyModule()
 		if got := string(info.ID); got != want {
-			t.Errorf("expected module ID %q, got %q", want, got)
+			t.Errorf("module ID = %q, want %q", got, want)
 		}
 		if info.New == nil {
 			t.Errorf("%s: New is nil", want)
@@ -168,7 +168,7 @@ func TestOpenDBTypeCheck(t *testing.T) {
 		t.Fatal("expected error opening an empty path")
 	}
 	if !strings.Contains(err.Error(), "placeholder") {
-		t.Errorf("expected the error to mention placeholder replacement, got %v", err)
+		t.Errorf("openDB() error = %v, want one mentioning placeholder replacement", err)
 	}
 }
 
@@ -183,7 +183,7 @@ func TestOpenDBRejectsIPv4Only(t *testing.T) {
 		t.Fatal("expected error opening an IPv4-only database")
 	}
 	if !strings.Contains(err.Error(), "ip_version 4") {
-		t.Errorf("expected the error to name ip_version 4, got %v", err)
+		t.Errorf("openDB() error = %v, want one naming ip_version 4", err)
 	}
 
 	// A type mismatch is the more common mistake and is reported
@@ -193,7 +193,7 @@ func TestOpenDBRejectsIPv4Only(t *testing.T) {
 		t.Fatal("expected type error opening a Test database as a country db")
 	}
 	if strings.Contains(err.Error(), "ip_version") {
-		t.Errorf("expected the type error to win over the version error, got %v", err)
+		t.Errorf("openDB() error = %v, want the type error, not the version error", err)
 	}
 }
 
@@ -279,7 +279,7 @@ func TestUnprovisionedFailsClosed(t *testing.T) {
 	} {
 		got, err := m.MatchWithError(r)
 		if err == nil || !strings.Contains(err.Error(), "not provisioned") {
-			t.Errorf("%s: expected a not provisioned error, got %v", name, err)
+			t.Errorf("%s: MatchWithError() error = %v, want not provisioned", name, err)
 		}
 		if got {
 			t.Errorf("%s: expected no match from an unprovisioned matcher", name)
@@ -318,7 +318,7 @@ func TestCountryMatch(t *testing.T) {
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("Test %d: %s: expected %v, got %v", i, tc.remoteAddr, tc.want, got)
+			t.Errorf("Test %d: %s: MatchWithError() = %v, want %v", i, tc.remoteAddr, got, tc.want)
 		}
 	}
 }
@@ -337,7 +337,7 @@ func TestCountryMatchUnknown(t *testing.T) {
 		t.Error("expected record without country to count as unknown")
 	}
 	if got, err := m.MatchWithError(newRequest("216.160.83.56:1234")); err != nil || got {
-		t.Errorf("expected US not to match GB even with match_unknown, got %v (%v)", got, err)
+		t.Errorf("US against GB with match_unknown: MatchWithError() = %v, %v, want false", got, err)
 	}
 	// A client whose address cannot be parsed at all (a Unix socket
 	// listener) is unknown in the same sense as an absent record.
@@ -359,7 +359,7 @@ func TestCountryPlaceholder(t *testing.T) {
 	}
 	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if got := repl.ReplaceAll("{geoip.country}", ""); got != "GB" {
-		t.Errorf("placeholder: expected GB, got %q", got)
+		t.Errorf("{geoip.country} = %q, want GB", got)
 	}
 
 	// An unknown IP must still set the placeholder, to an empty string.
@@ -369,7 +369,7 @@ func TestCountryPlaceholder(t *testing.T) {
 	}
 	repl = r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if v, known := repl.Get("geoip.country"); !known || v != "" {
-		t.Errorf("unknown IP: expected known empty placeholder, got known=%v value=%q", known, v)
+		t.Errorf("unknown IP: {geoip.country} = %q, known = %v, want known and empty", v, known)
 	}
 }
 
@@ -398,11 +398,11 @@ func TestEarlyDataRejected(t *testing.T) {
 		}
 		var handlerErr caddyhttp.HandlerError
 		if !errors.As(err, &handlerErr) {
-			t.Errorf("%s: expected a caddyhttp.HandlerError, got %v", name, err)
+			t.Errorf("%s: MatchWithError() error = %v, want a caddyhttp.HandlerError", name, err)
 			continue
 		}
 		if handlerErr.StatusCode != http.StatusTooEarly {
-			t.Errorf("%s: expected status %d, got %d", name, http.StatusTooEarly, handlerErr.StatusCode)
+			t.Errorf("%s: status = %d, want %d", name, handlerErr.StatusCode, http.StatusTooEarly)
 		}
 
 		// A completed handshake is matched as usual.
@@ -535,15 +535,15 @@ func TestPlaceholderSurvivesLaterMatcher(t *testing.T) {
 
 	r := newRequest("50.114.0.1:1234")
 	if got, err := first.MatchWithError(r); err != nil || !got {
-		t.Fatalf("expected the Country database to match US, got %v (%v)", got, err)
+		t.Fatalf("Country database: MatchWithError() = %v, %v, want true", got, err)
 	}
 	if got, err := second.MatchWithError(r); err != nil || got {
-		t.Fatalf("expected the City database not to resolve this address, got %v (%v)", got, err)
+		t.Fatalf("City database: MatchWithError() = %v, %v, want false", got, err)
 	}
 
 	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if got := repl.ReplaceAll("{geoip.country}", "MISSING"); got != "US" {
-		t.Errorf("expected US to survive the second matcher, got %q", got)
+		t.Errorf("{geoip.country} after the second matcher = %q, want US", got)
 	}
 }
 
@@ -589,7 +589,7 @@ func TestASNMatch(t *testing.T) {
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("Test %d: %s: expected %v, got %v", i, tc.remoteAddr, tc.want, got)
+			t.Errorf("Test %d: %s: MatchWithError() = %v, want %v", i, tc.remoteAddr, got, tc.want)
 		}
 	}
 }
@@ -624,7 +624,7 @@ func TestASNAcrossDatabaseEditions(t *testing.T) {
 			want := strconv.FormatUint(uint64(tc.asn), 10)
 			repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 			if v := repl.ReplaceAll("{geoip.asn}", ""); v != want {
-				t.Errorf("placeholder: expected %s, got %q", want, v)
+				t.Errorf("{geoip.asn} = %q, want %s", v, want)
 			}
 		})
 	}
@@ -662,7 +662,7 @@ func TestShieldEditions(t *testing.T) {
 			t.Fatalf("country %s: %v", db, err)
 		}
 		if ok, err := m.MatchWithError(newRequest("81.2.69.160:1234")); err != nil || !ok {
-			t.Errorf("country %s: expected GB match, got %v %v", db, ok, err)
+			t.Errorf("country %s: MatchWithError() = %v, %v, want true", db, ok, err)
 		}
 	}
 	for _, db := range []string{cityShieldDB, entShieldDB} {
@@ -671,7 +671,7 @@ func TestShieldEditions(t *testing.T) {
 			t.Fatalf("subdivision %s: %v", db, err)
 		}
 		if ok, err := m.MatchWithError(newRequest("81.2.69.160:1234")); err != nil || !ok {
-			t.Errorf("subdivision %s: expected ENG match, got %v %v", db, ok, err)
+			t.Errorf("subdivision %s: MatchWithError() = %v, %v, want true", db, ok, err)
 		}
 	}
 	m := MatchGeoIPASN{DB: entShieldDB, ASNs: []uint32{14671}}
@@ -679,7 +679,7 @@ func TestShieldEditions(t *testing.T) {
 		t.Fatalf("asn %s: %v", entShieldDB, err)
 	}
 	if ok, err := m.MatchWithError(newRequest("74.209.24.0:1234")); err != nil || !ok {
-		t.Errorf("asn %s: expected AS14671 match, got %v %v", entShieldDB, ok, err)
+		t.Errorf("asn %s: MatchWithError() = %v, %v, want true", entShieldDB, ok, err)
 	}
 }
 
@@ -694,7 +694,7 @@ func TestRefusedEditions(t *testing.T) {
 			"anonymous":   &MatchGeoIPAnonymous{DB: db, Types: []string{"vpn"}},
 		} {
 			if err := p.Provision(caddy.Context{}); err == nil {
-				t.Errorf("%s: expected %s to be refused", name, db)
+				t.Errorf("%s: Provision() error = nil for %s, want error", name, db)
 			}
 		}
 	}
@@ -712,7 +712,7 @@ func TestDamagedDatabases(t *testing.T) {
 		"anonymous":   &MatchGeoIPAnonymous{DB: badMetadataDB, Types: []string{"vpn"}},
 	} {
 		if err := p.Provision(caddy.Context{}); err == nil {
-			t.Errorf("%s: expected %s to be refused", name, badMetadataDB)
+			t.Errorf("%s: Provision() error = nil for %s, want error", name, badMetadataDB)
 		}
 	}
 
@@ -721,14 +721,14 @@ func TestDamagedDatabases(t *testing.T) {
 		t.Fatalf("country %s: %v", badDoubleDB, err)
 	}
 	if ok, err := c.MatchWithError(newRequest("81.2.69.160:1234")); err != nil || !ok {
-		t.Errorf("country %s: expected GB match, got %v %v", badDoubleDB, ok, err)
+		t.Errorf("country %s: MatchWithError() = %v, %v, want true", badDoubleDB, ok, err)
 	}
 	s := MatchGeoIPSubdivision{DB: badDoubleDB, Country: "GB", Subdivisions: []string{"ENG"}}
 	if err := s.Provision(caddy.Context{}); err != nil {
 		t.Fatalf("subdivision %s: %v", badDoubleDB, err)
 	}
 	if ok, err := s.MatchWithError(newRequest("81.2.69.160:1234")); err != nil || !ok {
-		t.Errorf("subdivision %s: expected ENG match, got %v %v", badDoubleDB, ok, err)
+		t.Errorf("subdivision %s: MatchWithError() = %v, %v, want true", badDoubleDB, ok, err)
 	}
 }
 
@@ -750,7 +750,7 @@ func TestASNMatchUnknownAndPlaceholder(t *testing.T) {
 	}
 	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if got := repl.ReplaceAll("{geoip.asn}", ""); got != "1221" {
-		t.Errorf("placeholder: expected 1221, got %q", got)
+		t.Errorf("{geoip.asn} = %q, want 1221", got)
 	}
 }
 
@@ -864,14 +864,14 @@ func TestSubdivisionCountryMismatchIsNotUnknown(t *testing.T) {
 
 	r := newRequest("216.160.83.56:1234")
 	if got, err := m.MatchWithError(r); err != nil || got {
-		t.Errorf("expected a US address not to match a GB rule, got %v (%v)", got, err)
+		t.Errorf("US address against a GB rule: MatchWithError() = %v, %v, want false", got, err)
 	}
 
 	// The placeholders still report what the database knows, even
 	// though this matcher did not match.
 	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != "US-WA" {
-		t.Errorf("placeholders on a country mismatch: expected US-WA, got %q", got)
+		t.Errorf("placeholders on a country mismatch = %q, want US-WA", got)
 	}
 }
 
@@ -887,7 +887,7 @@ func TestSubdivisionPlaceholders(t *testing.T) {
 	}
 	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != "GB-WBK" {
-		t.Errorf("placeholders: expected GB-WBK, got %q", got)
+		t.Errorf("placeholders = %q, want GB-WBK", got)
 	}
 
 	// A rule on the outer level matches, but the placeholder still
@@ -903,7 +903,7 @@ func TestSubdivisionPlaceholders(t *testing.T) {
 	}
 	repl = r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != "GB-WBK" {
-		t.Errorf("outer level placeholders: expected GB-WBK, got %q", got)
+		t.Errorf("outer level placeholders = %q, want GB-WBK", got)
 	}
 
 	// An unknown IP must still set both, to empty strings.
@@ -950,7 +950,7 @@ func TestSubdivisionProvisionRejects(t *testing.T) {
 		t.Fatal("expected provision to reject a bad code among good ones")
 	}
 	if !strings.Contains(err.Error(), "CALI") {
-		t.Errorf("expected the error to name the offending code, got %v", err)
+		t.Errorf("Provision() error = %v, want one naming CALI", err)
 	}
 }
 
@@ -979,7 +979,7 @@ func TestSubdivisionMissingFieldsDeferToValidate(t *testing.T) {
 		},
 	} {
 		if err := tc.m.Provision(caddy.Context{}); err != nil {
-			t.Errorf("%s: expected Provision to defer, got %v", tc.name, err)
+			t.Errorf("%s: Provision() error = %v, want nil", tc.name, err)
 		}
 
 		err := tc.m.Validate()
@@ -987,7 +987,7 @@ func TestSubdivisionMissingFieldsDeferToValidate(t *testing.T) {
 			t.Fatalf("%s: expected Validate to reject", tc.name)
 		}
 		if !strings.Contains(err.Error(), tc.want) {
-			t.Errorf("%s: expected an error mentioning %q, got %v", tc.name, tc.want, err)
+			t.Errorf("%s: Validate() error = %v, want one mentioning %q", tc.name, err, tc.want)
 		}
 	}
 }
@@ -1012,17 +1012,17 @@ func TestSubdivisionPlaceholdersMoveTogether(t *testing.T) {
 
 	r := newRequest(addr)
 	if got, err := first.MatchWithError(r); err != nil || !got {
-		t.Fatalf("expected the City database to match US-CA, got %v (%v)", got, err)
+		t.Fatalf("City database: MatchWithError() = %v, %v, want true", got, err)
 	}
 	// The Enterprise record has a country but no subdivision, so this
 	// matcher does not match; the placeholders must still describe it.
 	if got, err := second.MatchWithError(r); err != nil || got {
-		t.Fatalf("expected no match on a record without subdivisions, got %v (%v)", got, err)
+		t.Fatalf("record without subdivisions: MatchWithError() = %v, %v, want false", got, err)
 	}
 
 	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != "JP-" {
-		t.Errorf("placeholders: expected JP- from one record, got %q", got)
+		t.Errorf("placeholders = %q, want JP- from one record", got)
 	}
 }
 
@@ -1038,7 +1038,7 @@ func TestPlaceholderSurvivesAbsentRecord(t *testing.T) {
 
 	r := newRequest("216.160.83.56:1234") // US-WA in the City database
 	if got, err := first.MatchWithError(r); err != nil || !got {
-		t.Fatalf("expected US-WA to match, got %v (%v)", got, err)
+		t.Fatalf("US-WA: MatchWithError() = %v, %v, want true", got, err)
 	}
 
 	// Same request, an address the City database cannot place. Sharing
@@ -1048,12 +1048,12 @@ func TestPlaceholderSurvivesAbsentRecord(t *testing.T) {
 	*r2 = *r2.WithContext(r.Context()) // share the replacer
 	caddyhttp.SetVar(r2.Context(), caddyhttp.ClientIPVarKey, "50.114.0.1")
 	if got, err := first.MatchWithError(r2); err != nil || got {
-		t.Fatalf("expected no match for an absent record, got %v (%v)", got, err)
+		t.Fatalf("absent record: MatchWithError() = %v, %v, want false", got, err)
 	}
 
 	repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
 	if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != "US-WA" {
-		t.Errorf("expected US-WA to survive an absent record, got %q", got)
+		t.Errorf("placeholders after an absent record = %q, want US-WA", got)
 	}
 }
 
@@ -1072,7 +1072,7 @@ func TestProvisionDefersEmptySet(t *testing.T) {
 		"anonymous":   &MatchGeoIPAnonymous{DB: db},
 	} {
 		if err := m.Provision(caddy.Context{}); err != nil {
-			t.Errorf("%s: expected Provision to defer, got %v", name, err)
+			t.Errorf("%s: Provision() error = %v, want nil", name, err)
 		}
 		if err := m.Validate(); err == nil {
 			t.Errorf("%s: expected Validate to reject", name)

@@ -155,7 +155,7 @@ func TestASNUnmarshalCaddyfile(t *testing.T) {
 		err := m.UnmarshalCaddyfile(caddyfile.NewTestDispenser(tc.input))
 		if tc.wantErr {
 			if err == nil {
-				t.Errorf("Test %d: expected error but got none", i)
+				t.Errorf("Test %d: UnmarshalCaddyfile() error = nil, want error", i)
 			}
 			continue
 		}
@@ -164,13 +164,13 @@ func TestASNUnmarshalCaddyfile(t *testing.T) {
 			continue
 		}
 		if len(m.ASNs) != tc.wantASNs {
-			t.Errorf("Test %d: expected %d asns, got %d", i, tc.wantASNs, len(m.ASNs))
+			t.Errorf("Test %d: got %d asns, want %d", i, len(m.ASNs), tc.wantASNs)
 		}
 		if !slices.Equal(m.ASNFiles, tc.wantFiles) {
-			t.Errorf("Test %d: expected asn_file %q, got %q", i, tc.wantFiles, m.ASNFiles)
+			t.Errorf("Test %d: asn_file = %q, want %q", i, m.ASNFiles, tc.wantFiles)
 		}
 		if m.MatchUnknown != tc.wantUnknown {
-			t.Errorf("Test %d: expected match_unknown=%v, got %v", i, tc.wantUnknown, m.MatchUnknown)
+			t.Errorf("Test %d: match_unknown = %v, want %v", i, m.MatchUnknown, tc.wantUnknown)
 		}
 	}
 }
@@ -187,7 +187,7 @@ func TestASNValidate(t *testing.T) {
 	} {
 		err := tc.m.Validate()
 		if tc.wantErr && err == nil {
-			t.Errorf("Test %d: expected error but got none", i)
+			t.Errorf("Test %d: Validate() error = nil, want error", i)
 		}
 		if !tc.wantErr && err != nil {
 			t.Errorf("Test %d: unexpected error: %v", i, err)
@@ -282,7 +282,7 @@ func TestASNFile(t *testing.T) {
 		err := m.Provision(caddy.Context{})
 		if tc.wantErr != "" {
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Errorf("Test %d: expected error containing %q, got %v", i, tc.wantErr, err)
+				t.Errorf("Test %d: Provision() error = %v, want one containing %q", i, err, tc.wantErr)
 			}
 			continue
 		}
@@ -291,7 +291,7 @@ func TestASNFile(t *testing.T) {
 			continue
 		}
 		if len(m.asns) != tc.wantLen {
-			t.Errorf("Test %d: expected %d asns, got %d", i, tc.wantLen, len(m.asns))
+			t.Errorf("Test %d: got %d asns, want %d", i, len(m.asns), tc.wantLen)
 		}
 		if err := m.Validate(); err != nil {
 			t.Errorf("Test %d: validate: %v", i, err)
@@ -316,7 +316,7 @@ func TestASNFile(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got != tc.want {
-			t.Errorf("%s: expected %v, got %v", tc.remoteAddr, tc.want, got)
+			t.Errorf("%s: MatchWithError() = %v, want %v", tc.remoteAddr, got, tc.want)
 		}
 	}
 }
@@ -345,14 +345,14 @@ func TestASNFiles(t *testing.T) {
 	}
 	want := []string{"1221", "64496", "64497", "64498", "64499", "64500"}
 	if got := slices.Sorted(maps.Keys(m.asns)); !slices.Equal(got, want) {
-		t.Errorf("expected %v, got %v", want, got)
+		t.Errorf("asns = %v, want %v", got, want)
 	}
 
 	empty := write("empty.txt", "# fetch failed\n")
 	m = MatchGeoIPASN{DB: asnDB, ASNFiles: append(files, empty)}
 	err := m.Provision(caddy.Context{})
 	if err == nil || !strings.Contains(err.Error(), "empty.txt") {
-		t.Errorf("expected the empty file to fail the load by name, got %v", err)
+		t.Errorf("Provision() error = %v, want one naming empty.txt", err)
 	}
 }
 

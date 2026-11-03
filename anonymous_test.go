@@ -124,7 +124,7 @@ func TestAnonymousProvisionRejects(t *testing.T) {
 	m := MatchGeoIPAnonymous{DB: anonDB, Types: []string{"vpn", "proxy"}}
 	err := m.Provision(caddy.Context{})
 	if err == nil || !strings.Contains(err.Error(), "proxy") {
-		t.Errorf("expected provision to reject type proxy by name, got %v", err)
+		t.Errorf("Provision() error = %v, want one naming type proxy", err)
 	}
 
 	// Databases without the flags are rejected by type: a Country file,

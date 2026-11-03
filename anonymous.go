@@ -105,8 +105,8 @@ func (m *MatchGeoIPAnonymous) Provision(ctx caddy.Context) error {
 		return nil
 	}
 	for _, t := range m.Types {
-		i := anonKind(t)
-		if i < 0 {
+		i, ok := anonKind(t)
+		if !ok {
 			return fmt.Errorf("invalid type %q", t)
 		}
 		m.types |= 1 << i
@@ -116,14 +116,14 @@ func (m *MatchGeoIPAnonymous) Provision(ctx caddy.Context) error {
 	return err
 }
 
-// anonKind returns the index of kind in anonKinds, or -1.
-func anonKind(kind string) int {
+// anonKind returns the index of kind in anonKinds, and whether it is one.
+func anonKind(kind string) (int, bool) {
 	for i, k := range anonKinds {
 		if strings.EqualFold(kind, k) {
-			return i
+			return i, true
 		}
 	}
-	return -1
+	return 0, false
 }
 
 // Validate ensures the configuration is usable.
@@ -184,7 +184,7 @@ func (m *MatchGeoIPAnonymous) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					return d.ArgErr()
 				}
 				for _, a := range args {
-					if anonKind(a) < 0 {
+					if _, ok := anonKind(a); !ok {
 						return d.Errf("invalid type %q: one of %s", a, strings.Join(anonKinds[:], ", "))
 					}
 				}
