@@ -284,17 +284,8 @@ func (m *MatchGeoIPASN) Validate() error {
 // MatchWithError returns true if the client of r is in one of the
 // configured autonomous systems.
 func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
-	// Early data (0-RTT) arrives before the handshake has verified the
-	// client address, so refuse it with 425 until the handshake completes,
-	// same as Caddy's own IP matchers do.
-	if r.TLS != nil && !r.TLS.HandshakeComplete {
-		return false, caddyhttp.Error(http.StatusTooEarly,
-			fmt.Errorf("TLS handshake not complete, client IP cannot be verified"))
-	}
-
-	// Guard for callers outside Caddy; fails closed instead of nil-dereferencing.
-	if m.db == nil {
-		return false, fmt.Errorf("geoip_asn: not provisioned")
+	if err := guard(r, "geoip_asn", m.db); err != nil {
+		return false, err
 	}
 
 	asn, err := lookup(r, "geoip.asn", m.asnOf)

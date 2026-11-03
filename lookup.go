@@ -197,6 +197,22 @@ func overwritePlaceholder(r *http.Request, placeholder, value string) {
 	}
 }
 
+// guard refuses a request the named matcher cannot answer.
+func guard(r *http.Request, name string, db *maxminddb.Reader) error {
+	// Guard for callers outside Caddy; fails closed instead of nil-dereferencing.
+	if db == nil {
+		return fmt.Errorf("%s: not provisioned", name)
+	}
+	// Early data (0-RTT) arrives before the handshake has verified the
+	// client address, so refuse it with 425 until the handshake completes,
+	// same as Caddy's own IP matchers do.
+	if r.TLS != nil && !r.TLS.HandshakeComplete {
+		return caddyhttp.Error(http.StatusTooEarly,
+			fmt.Errorf("TLS handshake not complete, client IP cannot be verified"))
+	}
+	return nil
+}
+
 // clientIP returns the client IP as resolved by the server (honoring
 // trusted_proxies), falling back to the connection's remote address.
 // An address that cannot be parsed, which only happens on Unix socket

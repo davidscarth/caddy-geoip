@@ -267,9 +267,10 @@ func TestLookupErrorFailsClosed(t *testing.T) {
 
 // TestUnprovisionedFailsClosed pins that a matcher driven without a
 // successful Provision returns an error rather than dereferencing a
-// nil reader. Caddy never reaches this state; tests and embedders can.
+// nil reader, even in early data, since a retry would fail the same way.
 func TestUnprovisionedFailsClosed(t *testing.T) {
 	r := newRequest("81.2.69.142:1234")
+	r.TLS = &tls.ConnectionState{HandshakeComplete: false}
 	for name, m := range map[string]caddyhttp.RequestMatcherWithError{
 		"country":     &MatchGeoIPCountry{},
 		"asn":         &MatchGeoIPASN{},
@@ -277,8 +278,8 @@ func TestUnprovisionedFailsClosed(t *testing.T) {
 		"anonymous":   &MatchGeoIPAnonymous{},
 	} {
 		got, err := m.MatchWithError(r)
-		if err == nil {
-			t.Errorf("%s: expected an error from an unprovisioned matcher", name)
+		if err == nil || !strings.Contains(err.Error(), "not provisioned") {
+			t.Errorf("%s: expected a not provisioned error, got %v", name, err)
 		}
 		if got {
 			t.Errorf("%s: expected no match from an unprovisioned matcher", name)
@@ -373,7 +374,7 @@ func TestCountryPlaceholder(t *testing.T) {
 }
 
 func TestEarlyDataRejected(t *testing.T) {
-	// The guard is copied into each matcher, so each copy is checked.
+	// Each matcher is driven to pin that it calls guard.
 	matchers := map[string]caddyhttp.RequestMatcherWithError{
 		"country": &MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}},
 		"asn":     &MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}},
@@ -388,8 +389,6 @@ func TestEarlyDataRejected(t *testing.T) {
 			t.Fatalf("%s: provision: %v", name, err)
 		}
 
-		// An incomplete handshake means 0-RTT early data, where the
-		// client IP is not yet verified; refuse the request with 425.
 		r := newRequest("81.2.69.142:1234")
 		r.TLS = &tls.ConnectionState{HandshakeComplete: false}
 
