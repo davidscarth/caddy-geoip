@@ -83,9 +83,10 @@ geolocation matchers.
   lines. Files are UTF-8 text with one ASN per line, with or without `AS` in
   front. Anything after a space, tab, comma, or semicolon is ignored, so a
   list with names or a CSV loads as published. Spamhaus ASN-DROP's JSON lines
-  load too. Blank lines and `#`, `;`, and `//` comments are skipped, and so is
-  a header on the first line of each file. A file that doesn't follow these
-  rules will return an error and fail to load.
+  load too. `#` and `//` start a comment anywhere on a line, a line starting
+  with `;` is a comment, and blank lines and a header on the first line of
+  each file are skipped. A file that doesn't follow these rules will return
+  an error and fail to load.
 - **type** - kinds of anonymizer to match, any of `anonymous`, `vpn`, `tor`,
   `hosting`, `public_proxy`, `residential_proxy`. These are MaxMind's
   Anonymous IP flags (`anonymous` is the umbrella, set whenever any other is).
@@ -366,7 +367,7 @@ Database updates are either manually placed or
 
 ## Checks
 
-Built and tested against Caddy v2.11.7 and maxminddb-golang v2.8.0, with no
+Built and tested against Caddy v2.11.7 and maxminddb-golang v2.9.0, with no
 other direct dependencies.
 
 The code passes:

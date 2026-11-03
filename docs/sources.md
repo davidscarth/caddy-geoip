@@ -102,9 +102,9 @@ accepts a few forms:
 - Spamhaus ASN-DROP's JSON lines (`{"asn":14061,...}`)
 
 The parser expects the number first on every line, `AS` prefix or not,
-and ignores whatever follows a space, tab, comma, semicolon, or `#`.
-Blank lines, lines starting with `#`, `;`, or `//`, and a CSV header on
-the first line are skipped. Any other line that does not start with a
+and ignores whatever follows a space, tab, comma, semicolon, `#`, or `//`.
+Blank lines, lines starting with `;`, and a CSV header on the first line
+are skipped. Any other line that does not start with a
 number is an error at load, naming the file and line. So is a line of
 several different ASNs (`14061,16509`), a file over 64 MiB, or binary
 data. An RIR or NRO delegated statistics file is refused with a note to

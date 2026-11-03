@@ -251,6 +251,7 @@ func TestASNFile(t *testing.T) {
 		// Comment lines, and headers: one with a digit in a later column,
 		// and a single-column one, which must name the column.
 		{file: write("comments.txt", "; list\n// note\n1221 // Telstra\n64496 ; Example\n"), wantLen: 2},
+		{file: write("glued.txt", "1221//Telstra\n64496#Example\n"), wantLen: 2},
 		{file: write("count.csv", "asn,ipv4_count\n1221,12\n64496,40\n"), wantLen: 2},
 		{file: write("column.txt", "ASN\n1221\n"), wantLen: 1},
 		{file: write("tomsk.txt", "AS5567 AS5567 (Tomsk Polytechnic)\n"), wantLen: 1},
@@ -264,6 +265,12 @@ func TestASNFile(t *testing.T) {
 		{file: write("typo.txt", "AS-1221\n64496\n"), wantErr: "typo.txt:1: invalid asn"},
 		{file: write("gap2.txt", "AS 1221\n64496\n"), wantErr: "gap2.txt:1: invalid asn"},
 		{file: write("zero.json", `{"asn":1221}`+"\n"+`{"asn":0}`+"\n"), wantErr: "zero.json:2: invalid asn 0"},
+		// A trailing comment used to hide the second ASN from the check.
+		{file: write("masked.txt", "1221 64496 // two providers\n"), wantErr: "masked.txt:1: several ASNs"},
+		{file: write("masked.csv", "1221,64496 // two providers\n"), wantErr: "masked.csv:1: several ASNs"},
+		// With the comment cut, a word and a comment is one word, which is
+		// only a header if it names the column.
+		{file: write("stray2.txt", "fetch // failed\n1221\n"), wantErr: "stray2.txt:1: invalid asn"},
 
 		// Other kinds of file, named in the error.
 		{file: write("ips.txt", "1.2.3.0/24\n"), wantErr: "IP address or network"},
@@ -354,7 +361,7 @@ func TestASNFiles(t *testing.T) {
 func FuzzReadASNFile(f *testing.F) {
 	for _, seed := range []string{
 		"1221\n64496\n", "ASN,Entity\n1221,Telstra\n", "{\"asn\":1221}\n", "AS1221 AS64496\n",
-		"# c\n; c\n// c\n", "\ufeff1221\r\n", "2.3|nro|1|2\n", "\x00",
+		"# c\n; c\n// c\n", "1221//c\n", "\ufeff1221\r\n", "2.3|nro|1|2\n", "\x00",
 	} {
 		f.Add([]byte(seed))
 	}

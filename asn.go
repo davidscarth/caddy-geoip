@@ -109,7 +109,7 @@ func (m *MatchGeoIPASN) Provision(ctx caddy.Context) error {
 // by a space, tab, comma, or semicolon and anything after it (a name, CSV
 // columns). A line may instead be a JSON object, read by its "asn" member
 // as Spamhaus ASN-DROP publishes them, and an object without one is skipped.
-// Blank lines, lines starting with ; or //, and anything after # are
+// Blank lines, lines starting with ;, and anything after # or // are
 // ignored, and the first line may be a CSV header.
 //
 // Anything else is refused with its line number, as is a line of several
@@ -160,15 +160,16 @@ func readASNFile(logger *slog.Logger, path string, set map[string]struct{}) erro
 				return fail(line, "%v (asn_file takes one JSON object per line)", err)
 			}
 			if rec.ASN == nil {
-				continue // metadata, such as ASN-DROP's first line
+				continue // metadata, such as ASN-DROP's last line
 			}
 			if n = uint64(*rec.ASN); n == 0 {
 				return fail(line, "invalid asn 0")
 			}
-		} else if strings.HasPrefix(text, ";") || strings.HasPrefix(text, "//") {
-			continue // a comment line. Later in a line, // and ; start ignored fields.
+		} else if strings.HasPrefix(text, ";") {
+			continue // a comment line. Elsewhere ; separates fields, like a comma.
 		} else {
 			text, _, _ = strings.Cut(text, "#")
+			text, _, _ = strings.Cut(text, "//")
 			fields := strings.FieldsFunc(text, sep)
 			if len(fields) == 0 {
 				continue
@@ -190,8 +191,8 @@ func readASNFile(logger *slog.Logger, path string, set map[string]struct{}) erro
 			// Without a header, a line whose other fields are all ASNs, not
 			// all this one (AS5567 AS5567 is a name), is a list on one line.
 			several, same := !header && len(fields) > 1, true
-			for _, f := range fields[1:] {
-				m, ok := parseASN(strings.Trim(f, `"`))
+			for _, field := range fields[1:] {
+				m, ok := parseASN(strings.Trim(field, `"`))
 				several, same = several && ok, same && m == n
 			}
 			if several && !same {

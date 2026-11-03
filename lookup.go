@@ -41,8 +41,8 @@ var countryPath = []any{"country", "iso_code"}
 // It logs the database's age to logger (see logDBAge).
 //
 // No Cleanup on purpose. A Caddy reload would run it with lookups still
-// in flight, triggering a race condition. Instead we rely on GC to
-// release the mapping.
+// in flight, triggering a race condition. Instead, maxminddb.Open sets a
+// finalizer that unmaps the file once nothing holds the reader anymore.
 func openDB(logger *slog.Logger, path string, types ...string) (*maxminddb.Reader, error) {
 	path = caddy.NewReplacer().ReplaceAll(path, "")
 	if path == "" {
