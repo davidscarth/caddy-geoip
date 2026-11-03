@@ -264,6 +264,7 @@ func isHeader(fields []string) bool {
 	return true
 }
 
+// isAddress reports whether s is an IP address or network.
 func isAddress(s string) bool {
 	_, err1 := netip.ParsePrefix(s)
 	_, err2 := netip.ParseAddr(s)

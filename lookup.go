@@ -28,9 +28,9 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 )
 
-// Path into a record for DecodePath, built once rather than per
-// request. The ASN path depends on the database edition, so it lives
-// on the matcher instead (see MatchGeoIPASN.Provision). The
+// countryPath is the path into a record for DecodePath, built once rather
+// than per request. The ASN path depends on the database edition, so it
+// lives on the matcher instead (see MatchGeoIPASN.Provision). The
 // subdivision matcher reads its record with a cursor and has no path
 // (see MatchGeoIPSubdivision.placeOf).
 var countryPath = []any{"country", "iso_code"}
