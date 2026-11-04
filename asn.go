@@ -289,10 +289,11 @@ func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
 		return false, err
 	}
 
-	asn, err := lookup(r, "geoip.asn", m.asnOf)
+	asn, err := resolve(r, m.asnOf)
 	if err != nil {
 		return false, err
 	}
+	setPlaceholder(r, "geoip.asn", asn)
 	if asn == "" {
 		return m.MatchUnknown, nil
 	}

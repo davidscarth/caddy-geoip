@@ -145,7 +145,7 @@ func (m *MatchGeoIPAnonymous) MatchWithError(r *http.Request) (bool, error) {
 	}
 
 	// One decode serves both the match and the placeholder, so this
-	// does not go through lookup, which returns only a string.
+	// does not go through resolve, which returns only a string.
 	var f anonFlags
 	if ip := clientIP(r); ip.IsValid() {
 		if err := m.db.Lookup(ip).Decode(&f); err != nil {

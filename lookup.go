@@ -129,19 +129,13 @@ func hasType(dbType string, types []string) bool {
 	return false
 }
 
-// lookup returns the value for the client of r, computed by decode,
-// and exposes it as the named placeholder. An IP that cannot be
-// resolved yields an empty string.
-func lookup(r *http.Request, placeholder string, decode func(netip.Addr) (string, error)) (string, error) {
-	var value string
+// resolve returns the value for the client of r, computed by decode.
+// An IP that cannot be resolved yields an empty string.
+func resolve(r *http.Request, decode func(netip.Addr) (string, error)) (string, error) {
 	if ip := clientIP(r); ip.IsValid() {
-		var err error
-		if value, err = decode(ip); err != nil {
-			return "", err
-		}
+		return decode(ip)
 	}
-	setPlaceholder(r, placeholder, value)
-	return value, nil
+	return "", nil
 }
 
 // lookupPlace returns the country code, the most specific subdivision
@@ -192,6 +186,18 @@ func setPlaceholder(r *http.Request, placeholder string, value any) {
 		}
 	}
 	repl.Set(placeholder, value)
+}
+
+// setCountry exposes code as {geoip.country} the way setPlaceholder
+// does. A subdivision belongs to the country it was read with, so a
+// different country takes {geoip.subdivision} with it.
+func setCountry(r *http.Request, code string) {
+	if repl, ok := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer); ok && code != "" {
+		if prev, known := repl.Get("geoip.country"); known && prev != code {
+			repl.Set("geoip.subdivision", "")
+		}
+	}
+	setPlaceholder(r, "geoip.country", code)
 }
 
 // overwritePlaceholder exposes value as the named placeholder, empty

@@ -460,6 +460,40 @@ func TestPlaceholderSurvivesLaterMatcher(t *testing.T) {
 	}
 }
 
+// TestCountryTakesSubdivisionAlong pins that a subdivision outlives a
+// later geoip_country only while the country stands: the same country
+// keeps it, no record keeps it, and a different country clears it.
+func TestCountryTakesSubdivisionAlong(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		db   string
+		addr string
+		want string
+	}{
+		{"same country keeps it", countryDB, "216.160.83.56:1234", "US-WA"},
+		{"no record keeps it", cityDB, "50.114.0.1:1234", "US-WA"},
+		{"different country clears it", countryDB, "[2001:218::1]:1234", "JP-"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := MatchGeoIPCountry{DB: tc.db, Countries: []string{"US"}}
+			if err := m.Provision(caddy.Context{}); err != nil {
+				t.Fatalf("provision: %v", err)
+			}
+			r := newRequest(tc.addr)
+			repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+			repl.Set("geoip.country", "US")
+			repl.Set("geoip.subdivision", "WA")
+
+			if _, err := m.MatchWithError(r); err != nil {
+				t.Fatal(err)
+			}
+			if got := repl.ReplaceAll("{geoip.country}-{geoip.subdivision}", ""); got != tc.want {
+				t.Errorf("placeholders = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestClientIPHonorsTrustedProxyVar(t *testing.T) {
 	m := MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}}
 

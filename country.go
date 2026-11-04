@@ -82,10 +82,11 @@ func (m *MatchGeoIPCountry) MatchWithError(r *http.Request) (bool, error) {
 		return false, err
 	}
 
-	code, err := lookup(r, "geoip.country", m.countryOf)
+	code, err := resolve(r, m.countryOf)
 	if err != nil {
 		return false, err
 	}
+	setCountry(r, code)
 	if code == "" {
 		return m.MatchUnknown, nil
 	}
