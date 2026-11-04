@@ -218,7 +218,7 @@ func readASNFile(logger *slog.Logger, path string, set map[string]struct{}) erro
 
 // logListAge logs one line about an ASN list that loaded: INFO with how
 // many ASNs it added, its modified time, and its age, WARN when it was
-// modified more than 30 days before now, or WARN when its modified time is
+// modified more than maxAgeDays before now, or WARN when its modified time is
 // in the future. asns counts only ASNs not already in the set.
 func logListAge(logger *slog.Logger, path string, asns int, modified, now time.Time) {
 	attrs := []any{slog.String("path", path), slog.Int("asns", asns), slog.String("modified", modified.UTC().Format(time.RFC3339))}
@@ -226,7 +226,7 @@ func logListAge(logger *slog.Logger, path string, asns int, modified, now time.T
 	case modified.After(now):
 		logger.Warn("asn list modified time is in the future", attrs...)
 	case ageDays(modified, now) > maxAgeDays:
-		logger.Warn("asn list is more than 30 days old", append(attrs, slog.Int("age_days", ageDays(modified, now)))...)
+		logger.Warn("asn list"+tooOldMsg, append(attrs, slog.Int("age_days", ageDays(modified, now)))...)
 	default:
 		logger.Info("asn list loaded", append(attrs, slog.Int("age_days", ageDays(modified, now)))...)
 	}

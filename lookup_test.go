@@ -656,7 +656,7 @@ func TestLogDBAge(t *testing.T) {
 	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
 	for _, tc := range []struct {
 		name  string
-		epoch uint
+		epoch uint64
 		want  string
 	}{
 		{"3 days", 1793275200, `{"level":"INFO","msg":"database loaded","path":"/db/x.mmdb","type":"GeoLite2-Country","built":"2026-10-29T12:00:00Z","age_days":3}`},
@@ -666,7 +666,11 @@ func TestLogDBAge(t *testing.T) {
 		{"future", 1793538000, `{"level":"WARN","msg":"database build date is missing or in the future","path":"/db/x.mmdb","type":"GeoLite2-Country","build_epoch":1793538000,"built":"2026-11-01T13:00:00Z"}`},
 		{"past year 9999", 253402300800, `{"level":"WARN","msg":"database build date is missing or in the future","path":"/db/x.mmdb","type":"GeoLite2-Country","build_epoch":253402300800}`},
 	} {
-		md := maxminddb.Metadata{DatabaseType: "GeoLite2-Country", BuildEpoch: tc.epoch}
+		epoch := uint(tc.epoch)
+		if uint64(epoch) != tc.epoch {
+			continue // the year 9999 does not fit a 32-bit uint
+		}
+		md := maxminddb.Metadata{DatabaseType: "GeoLite2-Country", BuildEpoch: epoch}
 		got := logLines(t, func(l *slog.Logger) { logDBAge(l, "/db/x.mmdb", md, now) })
 		if len(got) != 1 || got[0] != tc.want {
 			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)

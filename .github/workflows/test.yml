@@ -31,6 +31,10 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # 32-bit, where a uint cannot hold a 64-bit constant.
+      - name: go vet (arm)
+        run: GOOS=linux GOARCH=arm go vet ./...
+
       - name: go test -race
         run: go test -race ./...
 
@@ -43,3 +47,16 @@ jobs:
         uses: golang/govulncheck-action@v1
         with:
           go-version-input: stable
+
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          check-latest: true
+
+      - name: go test -race
+        run: go test -race ./...

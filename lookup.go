@@ -73,21 +73,26 @@ func openDB(logger *slog.Logger, path string, types ...string) (*maxminddb.Reade
 }
 
 // maxAgeDays is how old a database or list may be before loading it logs a
-// warning. The log messages state it, so change them with it.
+// warning.
 const maxAgeDays = 30
+
+// tooOldMsg is the warning for something older than maxAgeDays, with
+// what loaded in front: "database" or "asn list".
+var tooOldMsg = fmt.Sprintf(" is more than %d days old", maxAgeDays)
 
 // lastRFC3339 is the last second RFC 3339 can write, 9999-12-31T23:59:59Z.
 const lastRFC3339 = 253402300799
 
 // logDBAge logs one line about a database that loaded: INFO with its build
-// date and age, WARN when it was built more than 30 days before now, or
+// date and age, WARN when it was built more than maxAgeDays before now, or
 // WARN when the build date is missing or in the future, since its age is
 // then unknown.
 func logDBAge(logger *slog.Logger, path string, md maxminddb.Metadata, now time.Time) {
 	where := []any{slog.String("path", path), slog.String("type", md.DatabaseType)}
 	if md.BuildEpoch == 0 || md.BuildEpoch > uint(now.Unix()) {
 		attrs := append(where, slog.Uint64("build_epoch", uint64(md.BuildEpoch)))
-		if md.BuildEpoch != 0 && md.BuildEpoch <= lastRFC3339 {
+		// uint64, so the comparison compiles where uint is 32 bits.
+		if md.BuildEpoch != 0 && uint64(md.BuildEpoch) <= lastRFC3339 {
 			attrs = append(attrs, slog.String("built", rfc3339(int64(md.BuildEpoch))))
 		}
 		logger.Warn("database build date is missing or in the future", attrs...)
@@ -96,7 +101,7 @@ func logDBAge(logger *slog.Logger, path string, md maxminddb.Metadata, now time.
 	age := ageDays(time.Unix(int64(md.BuildEpoch), 0), now)
 	attrs := append(where, slog.String("built", rfc3339(int64(md.BuildEpoch))), slog.Int("age_days", age))
 	if age > maxAgeDays {
-		logger.Warn("database is more than 30 days old", attrs...)
+		logger.Warn("database"+tooOldMsg, attrs...)
 		return
 	}
 	logger.Info("database loaded", attrs...)
