@@ -126,10 +126,9 @@ These were checked in October 2026, counts are distinct ASNs at that time.
 MaxMind's Anonymous IP database is paid. For serious work, use it.
 
 If paid data is not an option, [open-anonymous-ip][openanonip] is a free one
-by the plugin author, built from the Tor Project exit lists, X4BNet's
-datacenter and VPN lists, and IPLocate's free proxy list, carrying `tor`,
-`hosting`, `vpn`, and `public_proxy` in one MMDB, rebuilt daily. It is
-experimental, and may change or go away.
+by the plugin author, built from various free and open sources, carrying `tor`,
+`hosting`, `vpn`, `public_proxy`, and `residential_proxy` in one MMDB, rebuilt
+daily. It is experimental, and may change or go away.
 
 If you would rather not depend on an experimental project, this is how
 to roll your own for each `type` from other free sources:
@@ -141,7 +140,7 @@ to roll your own for each `type` from other free sources:
 | `public_proxy` | IP2Location [IP2Proxy LITE][ip2proxy], MMDB | `geoip_anonymous` with `type anonymous` | good, it is an open-proxy list in the same record layout |
 | `tor` | Tor Project [exit list][torbulk] | a plain text list, so not this plugin unless you build it into an MMDB file yourself. Otherwise an IP source such as CrowdSec's Tor blocklist, or the firewall | good, the list is authoritative and hourly |
 | `anonymous` | the rows above together | both matchers | partial, umbrella minus residential |
-| `residential_proxy` | none | none | by design these are addresses on consumer ISPs, only commercial data such as MaxMind's sees them |
+| `residential_proxy` | a proxy on an ISP network: IPLocate [free-proxy-list][iplocate] and stormsia [proxy-list][stormsia] (MIT) for the proxy, ipverse [as-metadata][ipverse-meta] `isp` ASNs (CC0) for the network, X4BNet datacenter ASNs excluded | plain lists, so not this plugin unless you build them into an MMDB file yourself. | partial, proxies and proxy exits on consumer networks. Poor for the commercial pools, misses their SDK and botnet exits |
 
 [dbip-country]: https://db-ip.com/db/download/ip-to-country-lite
 [dbip-asn]: https://db-ip.com/db/download/ip-to-asn-lite
@@ -160,3 +159,6 @@ to roll your own for each `type` from other free sources:
 [bfi]: https://github.com/bountyyfi/bad-asn-list
 [torbulk]: https://check.torproject.org/torbulkexitlist
 [openanonip]: https://github.com/davidscarth/open-anonymous-ip
+[iplocate]: https://github.com/iplocate/free-proxy-list
+[stormsia]: https://github.com/stormsia/proxy-list
+[ipverse-meta]: https://github.com/ipverse/as-metadata
