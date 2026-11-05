@@ -215,7 +215,7 @@ func TestASNFile(t *testing.T) {
 	plain := write("asns.txt", "# hosting\n\n1221\n  64496  \r\n")
 	named := write("bad-asn-list.txt", "AS1221 Telstra Corporation Ltd\nas64496 Example, LLC\n64497\t# tabbed comment\n")
 	huge := write("huge.txt", "1221\n")
-	if err := os.Truncate(huge, 64<<20+1); err != nil {
+	if err := os.Truncate(huge, 16<<20+1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -234,8 +234,8 @@ func TestASNFile(t *testing.T) {
 		{file: "{env.CADDY_GEOIP_UNSET_ASN_LIST}", wantErr: "empty after placeholder"},
 		{file: asnDB, wantErr: "binary data"},
 		{file: huge, wantErr: "too large"},
-		{file: write("empty.txt", "# nothing here\n"), wantErr: "no autonomous system numbers"},
-		{file: write("meta.json", `{"type":"metadata"}`+"\n"), wantErr: "no autonomous system numbers"},
+		{file: write("empty.txt", "# nothing here\n"), wantErr: "not an acceptable list"},
+		{file: write("meta.json", `{"type":"metadata"}`+"\n"), wantErr: "not an acceptable list"},
 		{file: write("list.csv", "ASN,Entity\n1442,\"Surehosting Internet Solutions, Inc.\"\n3223;Voxility\n"), wantLen: 2},
 		{file: write("word.txt", "1221\nASN64496\n"), wantErr: "word.txt:2"},
 		{file: write("gap.txt", "AS 1221\n"), wantErr: "gap.txt:1"},
@@ -243,7 +243,7 @@ func TestASNFile(t *testing.T) {
 		{file: write("mixed.txt", "12a21\n"), wantErr: "mixed.txt:1"},
 		{file: write("zero.txt", "0\n"), wantErr: "zero.txt:1"},
 		{file: write("big.txt", "4294967296\n"), wantErr: "big.txt:1"},
-		{file: write("badjson.json", "{\"asn\":\n"), wantErr: "badjson.json:1"},
+		{file: write("badjson.json", "{\"asn\":\n"), wantErr: "not an acceptable list"},
 		{file: write("bigjson.json", `{"asn":4294967296}`+"\n"), wantErr: "bigjson.json:1"},
 		{file: write("bom.txt", "\ufeff1221\n64496\n"), wantLen: 2},
 		{file: write("utf16.txt", "\xff\xfe1\x002\x002\x001\x00\r\x00\n\x00"), wantErr: "UTF-16"},
@@ -255,28 +255,45 @@ func TestASNFile(t *testing.T) {
 		{file: write("count.csv", "asn,ipv4_count\n1221,12\n64496,40\n"), wantLen: 2},
 		{file: write("column.txt", "ASN\n1221\n"), wantLen: 1},
 		{file: write("tomsk.txt", "AS5567 AS5567 (Tomsk Polytechnic)\n"), wantLen: 1},
+		{file: write("twice.txt", "AS42772 AS42772\nAS1 Foo\n"), wantLen: 2},
 
-		// Files that used to load in part, without an error.
-		{file: write("oneline.csv", "1221,64496,64497\n"), wantErr: "oneline.csv:1: several ASNs on one line"},
-		{file: write("oneline.txt", "AS1221 AS64496\n"), wantErr: "oneline.txt:1: several ASNs on one line"},
-		{file: write("wrapped.csv", "1221,64496\n64497,64498\n"), wantErr: "wrapped.csv:1: several ASNs"},
+		// A line of numbers is a list on its own and columns otherwise.
+		{file: write("oneline.csv", "1221,64496,64497\n"), wantLen: 3},
+		{file: write("oneline.txt", "AS1221 AS64496\n"), wantLen: 2},
+		{file: write("wrapped.csv", "1221,64496\n64497,64498\n"), wantErr: "wrapped.csv: not an acceptable list"},
 		{file: write("junk.txt", "1221\nTelstra\n64496\n"), wantErr: "junk.txt:2: invalid asn"},
 		{file: write("stray.txt", "error_fetching_list\n1221,64496\n"), wantErr: "stray.txt:1: invalid asn"},
 		{file: write("typo.txt", "AS-1221\n64496\n"), wantErr: "typo.txt:1: invalid asn"},
 		{file: write("gap2.txt", "AS 1221\n64496\n"), wantErr: "gap2.txt:1: invalid asn"},
-		{file: write("zero.json", `{"asn":1221}`+"\n"+`{"asn":0}`+"\n"), wantErr: "zero.json:2: invalid asn 0"},
-		// A trailing comment used to hide the second ASN from the check.
-		{file: write("masked.txt", "1221 64496 // two providers\n"), wantErr: "masked.txt:1: several ASNs"},
-		{file: write("masked.csv", "1221,64496 // two providers\n"), wantErr: "masked.csv:1: several ASNs"},
+		{file: write("zero.json", `{"asn":1221}`+"\n"+`{"asn":0}`+"\n"), wantErr: "zero.json:2: invalid asn"},
+		// A comment is cut before the line is read.
+		{file: write("masked.txt", "1221 64496 // two providers\n"), wantLen: 2},
+		{file: write("masked.csv", "1221,64496 // two providers\n"), wantLen: 2},
 		// With the comment cut, a word and a comment is one word, which is
 		// only a header if it names the column.
 		{file: write("stray2.txt", "fetch // failed\n1221\n"), wantErr: "stray2.txt:1: invalid asn"},
 
-		// Other kinds of file, named in the error.
-		{file: write("ips.txt", "1.2.3.0/24\n"), wantErr: "IP address or network"},
-		{file: write("nro.txt", "2.3|nro|20261101|1\nnro|US|asn|1221|1|20010920|assigned\n"), wantErr: "RIR/NRO"},
-		{file: write("pretty.json", "{\n  \"asn\": 1221\n}\n"), wantErr: "one JSON object per line"},
-		{file: write("long.txt", strings.Repeat("x", 70000)+"\n1221\n"), wantErr: "long.txt:1: line longer than 64 KiB"},
+		// Other kinds of file: marked ones load, the rest are refused.
+		{file: write("ips.txt", "1.2.3.0/24\n"), wantErr: "ips.txt:1: invalid asn"},
+		{file: write("nro.txt", "2.3|nro|20261101|1\nnro|US|asn|1221|1|20010920|assigned\n"), wantErr: "nro.txt:1: invalid asn"},
+		{file: write("pretty.json", "{\n  \"asn\": 1221\n}\n"), wantLen: 1},
+		{file: write("array.json", "[\n  {\"ASN\": 174},\n  {\"ASN\": 612}\n]\n"), wantLen: 2},
+		{file: write("rules.txt", "(ip.geoip.asnum in { 16509 13335 })\n"), wantLen: 2},
+		{file: write("rules2.txt", "(ip.geoip.asnum eq 174) or (ip.geoip.asnum eq 612)\n"), wantLen: 2},
+		{file: write("rulesbad.txt", "(ip.geoip.asnum eq 174) and (cf.threat_score gt 10)\n"), wantErr: "not an acceptable list"},
+		{file: write("rulesnot.txt", "(ip.geoip.asnum ne 174)\n"), wantErr: "not an acceptable list"},
+		{file: write("long.txt", strings.Repeat("x", 70000)+"\n1221\n"), wantErr: "long.txt:1: invalid asn"},
+
+		// The AS number need not be the first column: a header names it,
+		// even one commented out, and a rank before an AS-prefixed number
+		// gives it away. A count after a bare number does not, so that
+		// file is refused rather than guessed at.
+		{file: write("ranked.csv", "rank,asn,name\n1,4134,Chinanet\n2,4837,Unicom\n"), wantLen: 2},
+		{file: write("spam.csv", "#;ASN, Organization name;Country\n1;AS4134 Chinanet;China\n6;AS4837 CHINA UNICOM;China\n;;\n"), wantLen: 2},
+		{file: write("counts.csv", "1221,12\n64496,40\n"), wantErr: "counts.csv: not an acceptable list"},
+		{file: write("digits.txt", "AS1024 12393239 Canada Inc\nAS210558 1337 Services GmbH\n"), wantLen: 2},
+		{file: write("table.md", "| | ASN Name |\n|---|---|\n| | 18779 EGIHOSTING - EGIHosting |\n| | 16509 AMAZON-02 - Amazon.com, Inc. |\n"), wantLen: 2},
+		{file: write("above.asn", "# Vortex Netsol\n136334\n# DataCity\n31798\n"), wantLen: 2},
 	} {
 		m := MatchGeoIPASN{DB: asnDB, ASNs: tc.inline, ASNFiles: []string{tc.file}}
 		err := m.Provision(caddy.Context{})
