@@ -27,7 +27,7 @@ func init() {
 // matcher. The network is the client's autonomous system, such as a
 // hosting provider or ISP. It sets {geoip.asn}.
 type MatchGeoIPASN struct {
-	// Path to an ASN, ISP, or Enterprise database. Supports placeholders.
+	// Path to an ASN, ISP, or Enterprise database.
 	DB string `json:"db,omitempty"`
 
 	// Autonomous system numbers to match.
@@ -37,7 +37,7 @@ type MatchGeoIPASN struct {
 	// line with or without an AS prefix, optionally followed by a name
 	// or CSV columns, or Spamhaus ASN-DROP in its JSON lines form. Each
 	// file is read on its own and must hold at least one ASN. Combined
-	// with ASNs. Supports placeholders.
+	// with ASNs in the same Caddyfile block.
 	ASNFiles []string `json:"asn_files,omitempty"`
 
 	// Whether an IP the database has no entry for (loopback, private
@@ -49,7 +49,7 @@ type MatchGeoIPASN struct {
 	db      *maxminddb.Reader
 }
 
-// CaddyModule returns the Caddy module information.
+// CaddyModule returns Caddy module information for the ASN matcher.
 func (MatchGeoIPASN) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.matchers.geoip_asn",
@@ -66,7 +66,7 @@ func (m *MatchGeoIPASN) Provision(ctx caddy.Context) error {
 	}
 	// The set is keyed by the decimal form so the request path can
 	// compare the placeholder string it publishes anyway. ASN 0 is
-	// reserved and never appears in a database.
+	// reserved.
 	m.asns = make(map[string]struct{}, len(m.ASNs))
 	for _, n := range m.ASNs {
 		if n == 0 {
@@ -86,7 +86,7 @@ func (m *MatchGeoIPASN) Provision(ctx caddy.Context) error {
 	}
 
 	// An Enterprise database nests the autonomous system fields under
-	// traits; ASN and ISP databases carry them at the top level. The
+	// traits, ASN and ISP databases carry them at the top level. The
 	// path is chosen once here rather than per request.
 	m.asnPath = []any{"autonomous_system_number"}
 	if strings.Contains(strings.ToLower(m.db.Metadata.DatabaseType), "enterprise") {
@@ -143,9 +143,6 @@ func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
 
 // asnOf returns the autonomous system number for ip as a decimal
 // string, or an empty string if the database has no entry for it.
-// MaxMind uses 0 for a record with no autonomous system, so a zero
-// here means absent rather than AS0, which is reserved and rejected
-// at provision time.
 func (m *MatchGeoIPASN) asnOf(ip netip.Addr) (string, error) {
 	var n uint32
 	if err := m.db.Lookup(ip).DecodePath(&n, m.asnPath...); err != nil {
@@ -157,7 +154,7 @@ func (m *MatchGeoIPASN) asnOf(ip netip.Addr) (string, error) {
 	return strconv.FormatUint(uint64(n), 10), nil
 }
 
-// UnmarshalCaddyfile sets up the matcher from Caddyfile tokens. Syntax:
+// UnmarshalCaddyfile sets up the matcher from the Caddyfile. Syntax:
 //
 //	geoip_asn {
 //	    db       <path>

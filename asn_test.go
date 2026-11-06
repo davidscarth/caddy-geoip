@@ -190,8 +190,8 @@ func TestASNValidate(t *testing.T) {
 
 // TestASNFile covers the line forms asn_file accepts (plain, AS-prefixed
 // with names, CSV with a header, Spamhaus JSON lines) and the ways a
-// file can be wrong. The Spamhaus sample mirrors ASN-DROP: a metadata
-// line with no "asn" member, then one record per line.
+// file can be wrong. The Spamhaus sample mirrors ASN-DROP (one record per
+// line, then a line with no "asn" member).
 func TestASNFile(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, content string) string {
@@ -201,10 +201,9 @@ func TestASNFile(t *testing.T) {
 		}
 		return path
 	}
-	spamhaus := write("asndrop.json", `{"type":"metadata","timestamp":1792903442,"size":39393,"records":2,"copyright":"(c) 2026 The Spamhaus Project SLU"}
-{"asn":1221,"rir":"apnic","domain":"telstra.net","cc":"AU","asname":"ASN-TELSTRA"}
+	spamhaus := write("asndrop.json", `{"asn":1221,"rir":"apnic","domain":"telstra.net","cc":"AU","asname":"ASN-TELSTRA"}
 {"asn":64496,"rir":"arin","domain":"example.net","cc":"US","asname":"EXAMPLE"}
-`)
+{"type":"metadata","timestamp":1792903442,"size":39393,"records":2,"copyright":"(c) 2026 The Spamhaus Project SLU"}`)
 	plain := write("asns.txt", "# hosting\n\n1221\n  64496  \r\n")
 	named := write("bad-asn-list.txt", "AS1221 Telstra Corporation Ltd\nas64496 Example, LLC\n64497\t# tabbed comment\n")
 	huge := write("huge.txt", "1221\n")

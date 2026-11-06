@@ -35,7 +35,7 @@ func init() {
 // The {geoip.subdivision} placeholder reports the most specific code,
 // whatever the rule matched on.
 type MatchGeoIPSubdivision struct {
-	// Path to a City or Enterprise database. Supports placeholders.
+	// Path to a City or Enterprise database.
 	DB string `json:"db,omitempty"`
 
 	// ISO 3166-1 alpha-2 code of the country the subdivisions belong
@@ -56,7 +56,7 @@ type MatchGeoIPSubdivision struct {
 	db           *maxminddb.Reader
 }
 
-// CaddyModule returns the Caddy module information.
+// CaddyModule returns Caddy module information for the subdivision matcher.
 func (MatchGeoIPSubdivision) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.matchers.geoip_subdivision",
@@ -253,7 +253,7 @@ func isSubdivisionCode(s string) bool {
 	return true
 }
 
-// UnmarshalCaddyfile sets up the matcher from Caddyfile tokens. Syntax:
+// UnmarshalCaddyfile sets up the matcher from the Caddyfile. Syntax:
 //
 //	geoip_subdivision {
 //	    db          <path>

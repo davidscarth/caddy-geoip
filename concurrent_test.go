@@ -10,8 +10,8 @@ import (
 )
 
 // TestMatchConcurrent drives each matcher from several goroutines at
-// once. Matchers are read-only after Provision, so this passes today;
-// under -race it fails the day mutable per-request state is added.
+// once. Matchers are read-only after Provision. If a mutable per-request
+// state is ever added in the future then under -race it will fail.
 func TestMatchConcurrent(t *testing.T) {
 	country := &MatchGeoIPCountry{DB: countryDB, Countries: []string{"GB"}}
 	asn := &MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}}

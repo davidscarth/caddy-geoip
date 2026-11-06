@@ -37,7 +37,7 @@ type MatchGeoIPCountry struct {
 	db        *maxminddb.Reader
 }
 
-// CaddyModule returns the Caddy module information.
+// CaddyModule returns Caddy module information for the country matcher.
 func (MatchGeoIPCountry) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.matchers.geoip_country",
@@ -105,8 +105,7 @@ func (m *MatchGeoIPCountry) countryOf(ip netip.Addr) (string, error) {
 }
 
 // isCountryCode reports whether s has the shape of an ISO 3166-1
-// alpha-2 code: exactly two ASCII letters. It does not check the code
-// is assigned, since databases also emit codes such as EU and AP.
+// alpha-2 code (exactly two ASCII letters).
 func isCountryCode(s string) bool {
 	if len(s) != 2 {
 		return false
@@ -120,7 +119,7 @@ func isCountryCode(s string) bool {
 	return true
 }
 
-// UnmarshalCaddyfile sets up the matcher from Caddyfile tokens. Syntax:
+// UnmarshalCaddyfile sets up the matcher from the Caddyfile. Syntax:
 //
 //	geoip_country {
 //	    db      <path>

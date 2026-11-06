@@ -28,32 +28,28 @@ func init() {
 // is no match_unknown.
 type MatchGeoIPAnonymous struct {
 	// Path to an Anonymous IP, Anonymous Plus, or IP Risk database.
-	// Supports placeholders.
 	DB string `json:"db,omitempty"`
 
 	// Kinds of anonymizer to match, any of: anonymous, vpn, tor,
 	// hosting, public_proxy, residential_proxy. "anonymous" is
-	// MaxMind's umbrella flag, set whenever any other is.
+	// an umbrella flag, set whenever any other is.
 	Types []string `json:"types,omitempty"`
 
 	// Least anonymizer_confidence, 1 to 99, for a public_proxy or
-	// residential_proxy to count. Only a record that carries a confidence
-	// is judged by it; without one the flags stand as published, as vpn,
-	// tor, and hosting always do. Needs an Anonymous Plus or IP Risk
-	// database and a proxy type.
+	// residential_proxy type. Records without a confidence aren't affected by
+	// the cutoff. Needs an Anonymous Plus or IP Risk database.
 	MinConfidence uint8 `json:"min_confidence,omitempty"`
 
-	// Least ip_risk, 1 to 99, to match whatever the flags say: a risky
-	// address is risky. Needs an IP Risk database. With it, type may be
-	// left out.
+	// Least ip_risk, 1 to 99. A risky address is risky regardless of
+	// anonymous type flags, so type may be left out. Needs IP Risk database.
 	MinRisk uint8 `json:"min_risk,omitempty"`
 
 	types uint8
 	db    *maxminddb.Reader
 }
 
-// proxyKinds are the bits confidence applies to: public_proxy and
-// residential_proxy, the two kinds MaxMind infers rather than knows.
+// proxyKinds are the bits confidence applies to, currently just public_proxy
+// and residential_proxy.
 const proxyKinds = 1<<4 | 1<<5
 
 // anonKinds lists the kinds in the order {geoip.anonymous} reports
@@ -63,8 +59,6 @@ var anonKinds = [...]string{
 }
 
 // anonFlags is the part of an Anonymous IP record the matcher reads.
-// MaxMind writes only the flags that are true, so an absent one is
-// false, and a clean address decodes to the zero value.
 type anonFlags struct {
 	Anonymous        bool     `maxminddb:"is_anonymous"`
 	VPN              bool     `maxminddb:"is_anonymous_vpn"`
@@ -77,9 +71,9 @@ type anonFlags struct {
 }
 
 // mask packs the flags into bits in anonKinds order. A proxy whose
-// confidence is below cutoff (0 for none) is dropped; one with no
-// confidence is kept, and the other kinds and the umbrella stand as
-// published. The anonymous bit is set whenever any other is.
+// confidence is below cutoff (0 for none) is dropped, one with no
+// confidence is kept, and the other kinds stand as published.
+// The anonymous bit is set whenever any other is.
 func (f anonFlags) mask(cutoff uint8) uint8 {
 	var m uint8
 	for i, set := range [...]bool{
@@ -114,7 +108,7 @@ var anonNames = func() (names [1 << len(anonKinds)]any) {
 	return names
 }()
 
-// CaddyModule returns the Caddy module information.
+// CaddyModule returns Caddy module information for the Anonymous matcher.
 func (MatchGeoIPAnonymous) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "http.matchers.geoip_anonymous",
@@ -193,8 +187,6 @@ func (m *MatchGeoIPAnonymous) MatchWithError(r *http.Request) (bool, error) {
 	}
 	mask := f.mask(m.MinConfidence)
 	setPlaceholder(r, "geoip.anonymous", anonNames[mask])
-	// Numbers, not strings: the replacer formats them only when a
-	// placeholder is expanded, and boxing a small int is free.
 	var confidence, risk any = "", ""
 	if f.Confidence != nil {
 		confidence = int(*f.Confidence)

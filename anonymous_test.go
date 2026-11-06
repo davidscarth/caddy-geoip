@@ -187,9 +187,8 @@ func TestAnonymousProvisionRejects(t *testing.T) {
 		t.Errorf("risk on Anonymous Plus: error = %v, want one naming IP Risk", err)
 	}
 
-	// Databases without the flags are rejected by type: a Country file,
-	// and MaxMind's Residential Proxy edition, which carries a confidence
-	// score but none of the booleans.
+	// Databases without boolean flags (like Country files or Residential Proxy
+	// editions with only confidence scores) are rejected by type.
 	for _, db := range []string{countryDB, resProxyDB} {
 		m := MatchGeoIPAnonymous{DB: db, Types: []string{"vpn"}}
 		if err := m.Provision(caddy.Context{}); err == nil {
@@ -251,10 +250,8 @@ func TestAnonymousMatch(t *testing.T) {
 	}
 }
 
-// TestAnonymousCutoffs pins the two cutoffs against the test data. No
-// proxy there carries a confidence, so the drop itself is pinned on mask;
-// here a proxy without one stands as published, a vpn's confidence is never
-// consulted (1.2.0.1 is a vpn at 30), and risk matches on the score alone.
+// TestAnonymousCutoffs validates matching behavior across various combinations
+// of minimum confidence and risk cutoffs, IP types, and flagless records.
 func TestAnonymousCutoffs(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -283,8 +280,8 @@ func TestAnonymousCutoffs(t *testing.T) {
 	}
 }
 
-// TestConfidencePlaceholder pins {geoip.confidence} and {geoip.risk}: the
-// number when the record carries one, empty when it does not.
+// TestConfidencePlaceholder verifies that {geoip.confidence} and {geoip.risk}
+// output their respective values when present, or remain empty.
 func TestConfidencePlaceholder(t *testing.T) {
 	m := MatchGeoIPAnonymous{DB: anonPlusDB, Types: []string{"vpn"}}
 	if err := m.Provision(caddy.Context{}); err != nil {
@@ -372,9 +369,7 @@ func TestAnonFlagsMask(t *testing.T) {
 	}
 }
 
-// TestAnonFlagsMaskConfidence pins the cutoff: it drops public_proxy and
-// residential_proxy, together, when the record carries a confidence below
-// it, and touches nothing else. A record without one is not judged.
+// TestAnonFlagsMaskConfidence verifies the confidence threshold behavior.
 func TestAnonFlagsMaskConfidence(t *testing.T) {
 	both := anonFlags{Anonymous: true, PublicProxy: true, ResidentialProxy: true}
 	for _, tc := range []struct {
