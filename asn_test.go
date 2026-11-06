@@ -238,7 +238,7 @@ func TestASNFile(t *testing.T) {
 		{file: write("badjson.json", "{\"asn\":\n"), wantErr: "badjson.json:1"},
 		{file: write("bigjson.json", `{"asn":4294967296}`+"\n"), wantErr: "bigjson.json:1"},
 		{file: write("bom.txt", "\ufeff1221\n64496\n"), wantLen: 2},
-		{file: write("utf16.txt", "\xff\xfe1\x002\x002\x001\x00\r\x00\n\x00"), wantErr: "UTF-16"},
+		{file: write("utf16.txt", "\xff\xfe1\x002\x002\x001\x00\r\x00\n\x00"), wantErr: "not UTF-8"},
 
 		// Comment lines, inline notes, headers, and markers.
 		{file: write("comments.txt", "; list\n// note\n1221 // Telstra\n64496 ; Example\n"), wantLen: 2},
@@ -275,7 +275,8 @@ func TestASNFile(t *testing.T) {
 		{file: write("quoted.json", "{\"asn\":\"1221\"}\n"), wantLen: 1},
 		{file: write("negative.txt", "-1234\n5678\n"), wantErr: "negative.txt:1: invalid asn"},
 		{file: write("aligned.md", "| ASN | Name |\n|:---:|---:|\n| 18779 | EGIHosting |\n"), wantLen: 1},
-		{file: write("dash-cell.csv", "Org;ASN\n-;1221\nLevel 3, LLC;3356\n"), wantLen: 2}, // only the header's delimiter splits
+		{file: write("dash-cell.csv", "Org;ASN\n-;1221\nLevel 3, LLC;3356\n"), wantLen: 2},        // only the header's delimiter splits
+		{file: write("pre-header.csv", "; ASN list\nasn,name\n1221,\"Foo # bar\"\n"), wantLen: 1}, // comments before the header, # inside a cell
 		{file: write("url-comment.txt", "1221 https://example.com // Telstra\n"), wantLen: 1},
 		{file: write("rules.txt", "(ip.geoip.asnum in { 16509 13335 })\n"), wantLen: 2},
 		{file: write("rules2.txt", "(ip.src.asnum eq 174) or (ip.src.asnum eq 612)\n"), wantLen: 2},

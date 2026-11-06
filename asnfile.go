@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/caddyserver/caddy/v2"
 )
@@ -49,8 +50,8 @@ func readASNFile(logger *slog.Logger, path string, set map[string]struct{}) erro
 	if err != nil {
 		return fmt.Errorf("asn_file: %w", err)
 	}
-	if len(data) > maxListBytes || slices.Contains(data, 0) {
-		return fmt.Errorf("asn_file: %s: binary data, UTF-16, or too large (%d MiB at most)", path, maxListBytes>>20)
+	if len(data) > maxListBytes || !utf8.Valid(data) || slices.Contains(data, 0) {
+		return fmt.Errorf("asn_file: %s: binary data, not UTF-8, or too large (%d MiB at most)", path, maxListBytes>>20)
 	}
 	asns, err := parseASNList(path, strings.TrimPrefix(string(data), "\uFEFF"))
 	if err != nil {
@@ -114,7 +115,7 @@ func (p *parser) add(line int, toks ...string) error {
 func (p *parser) parseJSON(text string) error {
 	dec := json.NewDecoder(strings.NewReader(text))
 	dec.UseNumber()
-	for line := 1; ; {
+	for line, pos := 1, 0; ; {
 		var v any
 		if err := dec.Decode(&v); err == io.EOF {
 			return nil
@@ -124,8 +125,8 @@ func (p *parser) parseJSON(text string) error {
 		if err := p.record(line, v); err != nil {
 			return err
 		}
-		rest := strings.TrimLeft(text[dec.InputOffset():], " \t\r\n")
-		line = 1 + strings.Count(text, "\n") - strings.Count(rest, "\n")
+		next := len(text) - len(strings.TrimLeft(text[dec.InputOffset():], " \t\r\n"))
+		line, pos = line+strings.Count(text[pos:next], "\n"), next
 	}
 }
 
@@ -182,7 +183,7 @@ func (p *parser) parseText(text string) error {
 		if i := strings.IndexAny(lines[rows[0]], ",;\t|"); i >= 0 {
 			delim = rune(lines[rows[0]][i])
 		}
-		return p.parseCSV(text, delim)
+		return p.parseCSV(text, delim, rows[0]+1)
 	}
 	for _, i := range rows {
 		asns, ok := pick(tokens(lines[i]), len(rows) == 1)
@@ -196,11 +197,12 @@ func (p *parser) parseText(text string) error {
 	return nil
 }
 
-// parseCSV reads the cell a header names from each row. CSV quoting lets a
-// cell hold the delimiter; a row that holds nothing is a Markdown divider.
-func (p *parser) parseCSV(text string, delim rune) error {
+// parseCSV reads the cell a header names from each row from line hdr on.
+// CSV quoting lets a cell hold the delimiter, so the text is read raw and
+// comments are cut from the one cell; a row that holds nothing is a divider.
+func (p *parser) parseCSV(text string, delim rune, hdr int) error {
 	r := csv.NewReader(strings.NewReader(text))
-	r.Comma, r.Comment, r.LazyQuotes, r.FieldsPerRecord, r.ReuseRecord, r.TrimLeadingSpace = delim, '#', true, -1, true, true
+	r.Comma, r.LazyQuotes, r.FieldsPerRecord, r.ReuseRecord, r.TrimLeadingSpace = delim, true, -1, true, true
 	for col := -1; ; {
 		rec, err := r.Read()
 		line, _ := r.FieldPos(0)
@@ -209,9 +211,10 @@ func (p *parser) parseCSV(text string, delim rune) error {
 			return nil
 		case err != nil:
 			return fmt.Errorf("asn_file: %s:%d: %w", p.path, line, err)
+		case line < hdr: // a comment
 		case col < 0:
-			if col = named(rec); delim == ' ' && col >= 0 {
-				r.FieldsPerRecord = len(rec) // unquoted spaces split a cell, so every row needs the header's count
+			if col = named(rec); delim == ' ' && col > 0 {
+				r.FieldsPerRecord = len(rec) // unquoted spaces before the cell would shift it
 			}
 		case slices.ContainsFunc(rec, hasContent):
 			cell := ""
