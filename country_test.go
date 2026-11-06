@@ -10,7 +10,7 @@ import (
 )
 
 func TestCountryUnmarshalCaddyfile(t *testing.T) {
-	for i, tc := range []struct {
+	for _, tc := range []struct {
 		input         string
 		wantDB        string
 		wantCountries int
@@ -66,24 +66,20 @@ func TestCountryUnmarshalCaddyfile(t *testing.T) {
 	} {
 		var m MatchGeoIPCountry
 		err := m.UnmarshalCaddyfile(caddyfile.NewTestDispenser(tc.input))
-		if tc.wantErr {
-			if err == nil {
-				t.Errorf("Test %d: UnmarshalCaddyfile() error = nil, want error", i)
-			}
-			continue
+		if (err != nil) != tc.wantErr {
+			t.Errorf("UnmarshalCaddyfile(%q) error = %v, wantErr %v", tc.input, err, tc.wantErr)
 		}
-		if err != nil {
-			t.Errorf("Test %d: unexpected error: %v", i, err)
+		if err != nil || tc.wantErr {
 			continue
 		}
 		if m.DB != tc.wantDB {
-			t.Errorf("Test %d: db = %q, want %q", i, m.DB, tc.wantDB)
+			t.Errorf("UnmarshalCaddyfile(%q) db = %q, want %q", tc.input, m.DB, tc.wantDB)
 		}
 		if len(m.Countries) != tc.wantCountries {
-			t.Errorf("Test %d: got %d countries, want %d", i, len(m.Countries), tc.wantCountries)
+			t.Errorf("UnmarshalCaddyfile(%q) got %d countries, want %d", tc.input, len(m.Countries), tc.wantCountries)
 		}
 		if m.MatchUnknown != tc.wantUnknown {
-			t.Errorf("Test %d: match_unknown = %v, want %v", i, m.MatchUnknown, tc.wantUnknown)
+			t.Errorf("UnmarshalCaddyfile(%q) match_unknown = %v, want %v", tc.input, m.MatchUnknown, tc.wantUnknown)
 		}
 	}
 }
@@ -110,20 +106,17 @@ func TestIsCountryCode(t *testing.T) {
 }
 
 func TestCountryValidate(t *testing.T) {
-	for i, tc := range []struct {
+	for _, tc := range []struct {
+		name    string
 		m       MatchGeoIPCountry
 		wantErr bool
 	}{
-		{m: MatchGeoIPCountry{DB: "/tmp/Country.mmdb", Countries: []string{"US"}}},
-		{m: MatchGeoIPCountry{Countries: []string{"US"}}, wantErr: true},
-		{m: MatchGeoIPCountry{DB: "/tmp/Country.mmdb"}, wantErr: true},
+		{name: "complete", m: MatchGeoIPCountry{DB: "/tmp/Country.mmdb", Countries: []string{"US"}}},
+		{name: "no db", m: MatchGeoIPCountry{Countries: []string{"US"}}, wantErr: true},
+		{name: "no countries", m: MatchGeoIPCountry{DB: "/tmp/Country.mmdb"}, wantErr: true},
 	} {
-		err := tc.m.Validate()
-		if tc.wantErr && err == nil {
-			t.Errorf("Test %d: Validate() error = nil, want error", i)
-		}
-		if !tc.wantErr && err != nil {
-			t.Errorf("Test %d: unexpected error: %v", i, err)
+		if err := tc.m.Validate(); (err != nil) != tc.wantErr {
+			t.Errorf("%s: Validate() error = %v, wantErr %v", tc.name, err, tc.wantErr)
 		}
 	}
 }
@@ -148,7 +141,7 @@ func TestCountryMatch(t *testing.T) {
 		t.Fatalf("validate: %v", err)
 	}
 
-	for i, tc := range []struct {
+	for _, tc := range []struct {
 		remoteAddr string
 		want       bool
 	}{
@@ -164,11 +157,11 @@ func TestCountryMatch(t *testing.T) {
 	} {
 		got, err := m.MatchWithError(newRequest(tc.remoteAddr))
 		if err != nil {
-			t.Errorf("Test %d: unexpected error: %v", i, err)
+			t.Errorf("%s: unexpected error: %v", tc.remoteAddr, err)
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("Test %d: %s: MatchWithError() = %v, want %v", i, tc.remoteAddr, got, tc.want)
+			t.Errorf("%s: MatchWithError() = %v, want %v", tc.remoteAddr, got, tc.want)
 		}
 	}
 }

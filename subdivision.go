@@ -135,9 +135,9 @@ func (m *MatchGeoIPSubdivision) MatchWithError(r *http.Request) (bool, error) {
 // database has no entry for it. Both are decoded whatever the country
 // turns out to be, so the placeholders report what the database knows
 // even for a request this matcher does not match.
-func (m *MatchGeoIPSubdivision) placeOf(ip netip.Addr) (string, string, bool, error) {
+func (m *MatchGeoIPSubdivision) placeOf(ip netip.Addr) (country, subdivision string, matched bool, err error) {
 	p := place{in: m.subdivisions}
-	if err := m.db.Lookup(ip).Decode(&p); err != nil {
+	if err = m.db.Lookup(ip).Decode(&p); err != nil {
 		return "", "", false, fmt.Errorf("geoip_subdivision: %s: %w", m.DB, err)
 	}
 	return p.country, p.subdivision, p.matched, nil

@@ -57,6 +57,44 @@ func TestAnonymousUnmarshalCaddyfile(t *testing.T) {
 			wantTypes: 1,
 		},
 		{
+			input: `geoip_anonymous {
+				db /tmp/Anon.mmdb
+				type public_proxy
+				confidence 60
+			}`,
+			wantTypes: 1,
+		},
+		{
+			input: `geoip_anonymous {
+				db /tmp/Anon.mmdb
+				type public_proxy
+				confidence 0
+			}`,
+			wantErr: true,
+		},
+		{
+			input: `geoip_anonymous {
+				db /tmp/Anon.mmdb
+				type public_proxy
+				confidence 100
+			}`,
+			wantErr: true,
+		},
+		{
+			input: `geoip_anonymous {
+				db /tmp/Risk.mmdb
+				risk 80
+			}`,
+			wantTypes: 0,
+		},
+		{
+			input: `geoip_anonymous {
+				db /tmp/Risk.mmdb
+				risk 100
+			}`,
+			wantErr: true,
+		},
+		{
 			input:   `geoip_anonymous /tmp/Anon.mmdb`,
 			wantErr: true,
 		},
@@ -112,6 +150,7 @@ func TestAnonymousValidate(t *testing.T) {
 		{name: "complete", m: MatchGeoIPAnonymous{DB: "x.mmdb", Types: []string{"vpn"}}},
 		{name: "no db", m: MatchGeoIPAnonymous{Types: []string{"vpn"}}, wantErr: true},
 		{name: "no types", m: MatchGeoIPAnonymous{DB: "x.mmdb"}, wantErr: true},
+		{name: "risk alone", m: MatchGeoIPAnonymous{DB: "x.mmdb", MinRisk: 80}},
 	} {
 		if err := tc.m.Validate(); (err != nil) != tc.wantErr {
 			t.Errorf("%s: Validate() error = %v, wantErr %v", tc.name, err, tc.wantErr)
@@ -125,6 +164,27 @@ func TestAnonymousProvisionRejects(t *testing.T) {
 	err := m.Provision(caddy.Context{})
 	if err == nil || !strings.Contains(err.Error(), "proxy") {
 		t.Errorf("Provision() error = %v, want one naming type proxy", err)
+	}
+
+	// A cutoff needs a proxy type to apply to, and a database that
+	// carries confidences.
+	m = MatchGeoIPAnonymous{DB: anonPlusDB, Types: []string{"vpn"}, MinConfidence: 50}
+	if err := m.Provision(caddy.Context{}); err == nil || !strings.Contains(err.Error(), "proxy") {
+		t.Errorf("confidence without a proxy type: error = %v, want one naming proxy", err)
+	}
+	m = MatchGeoIPAnonymous{DB: anonDB, Types: []string{"public_proxy"}, MinConfidence: 50}
+	if err := m.Provision(caddy.Context{}); err == nil || !strings.Contains(err.Error(), "Anonymous Plus") {
+		t.Errorf("confidence on Anonymous IP: error = %v, want one naming Anonymous Plus", err)
+	}
+	for _, db := range []string{anonPlusDB, ipRiskDB} {
+		m = MatchGeoIPAnonymous{DB: db, Types: []string{"residential_proxy"}, MinConfidence: 50}
+		if err := m.Provision(caddy.Context{}); err != nil {
+			t.Errorf("confidence on %s: %v", db, err)
+		}
+	}
+	m = MatchGeoIPAnonymous{DB: anonPlusDB, MinRisk: 80}
+	if err := m.Provision(caddy.Context{}); err == nil || !strings.Contains(err.Error(), "IP Risk") {
+		t.Errorf("risk on Anonymous Plus: error = %v, want one naming IP Risk", err)
 	}
 
 	// Databases without the flags are rejected by type: a Country file,
@@ -174,6 +234,7 @@ func TestAnonymousMatch(t *testing.T) {
 		{"ip risk with flags", ipRiskDB, []string{"vpn"}, "6.1.2.1:1234", true},
 		// A score with no flags is not a match for any kind.
 		{"ip risk score only", ipRiskDB, []string{"anonymous"}, "55.0.0.1:1234", false},
+
 		{"unparseable address", anonDB, []string{"anonymous"}, "not-an-address", false},
 	} {
 		m := MatchGeoIPAnonymous{DB: tc.db, Types: tc.types}
@@ -186,6 +247,80 @@ func TestAnonymousMatch(t *testing.T) {
 		}
 		if got != tc.want {
 			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestAnonymousCutoffs pins the two cutoffs against the test data. No
+// proxy there carries a confidence, so the drop itself is pinned on mask;
+// here a proxy without one stands as published, a vpn's confidence is never
+// consulted (1.2.0.1 is a vpn at 30), and risk matches on the score alone.
+func TestAnonymousCutoffs(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		m    MatchGeoIPAnonymous
+		addr string
+		want bool
+	}{
+		{"proxy without confidence stands", MatchGeoIPAnonymous{DB: anonPlusDB, Types: []string{"public_proxy"}, MinConfidence: 90}, "6.1.0.3:1234", true},
+		{"vpn below the cutoff is still a vpn", MatchGeoIPAnonymous{DB: anonPlusDB, Types: []string{"vpn", "public_proxy"}, MinConfidence: 90}, "1.2.0.1:1234", true},
+		{"risk alone, flagless record at 99", MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 80}, "55.0.0.4:1234", true},
+		{"risk alone, flagless record at 85", MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 80}, "214.2.3.6:1234", true},
+		{"risk alone, below at 65", MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 80}, "55.0.0.1:1234", false},
+		{"risk at the cutoff", MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 65}, "55.0.0.1:1234", true},
+		{"type or risk: vpn at 75 matches on vpn", MatchGeoIPAnonymous{DB: ipRiskDB, Types: []string{"vpn"}, MinRisk: 80}, "6.1.2.1:1234", true},
+		{"type or risk: hosting at 60 matches neither", MatchGeoIPAnonymous{DB: ipRiskDB, Types: []string{"vpn"}, MinRisk: 80}, "7.1.2.2:1234", false},
+		{"type or risk: flagless at 99 matches on risk", MatchGeoIPAnonymous{DB: ipRiskDB, Types: []string{"vpn"}, MinRisk: 80}, "55.0.0.4:1234", true},
+		{"risk, no record", MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 1}, "8.8.8.8:1234", false},
+	} {
+		if err := tc.m.Provision(caddy.Context{}); err != nil {
+			t.Fatalf("%s: provision: %v", tc.name, err)
+		}
+		got, err := tc.m.MatchWithError(newRequest(tc.addr))
+		if err != nil || got != tc.want {
+			t.Errorf("%s: got %v, %v, want %v", tc.name, got, err, tc.want)
+		}
+	}
+}
+
+// TestConfidencePlaceholder pins {geoip.confidence} and {geoip.risk}: the
+// number when the record carries one, empty when it does not.
+func TestConfidencePlaceholder(t *testing.T) {
+	m := MatchGeoIPAnonymous{DB: anonPlusDB, Types: []string{"vpn"}}
+	if err := m.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	for _, tc := range []struct{ addr, want string }{
+		{"1.2.0.1:1234", "30"},
+		{"1.2.0.2:1234", "99"},
+		{"1.2.0.0:1234", ""},
+		{"8.8.8.8:1234", ""},
+	} {
+		r := newRequest(tc.addr)
+		if _, err := m.MatchWithError(r); err != nil {
+			t.Fatal(err)
+		}
+		repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+		if v, _ := repl.Get("geoip.confidence"); v != tc.want {
+			t.Errorf("%s: {geoip.confidence} = %q, want %q", tc.addr, v, tc.want)
+		}
+	}
+	m = MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 1}
+	if err := m.Provision(caddy.Context{}); err != nil {
+		t.Fatalf("provision: %v", err)
+	}
+	for _, tc := range []struct{ addr, want string }{
+		{"6.1.2.1:1234", "75"},
+		{"55.0.0.4:1234", "99"},
+		{"11.1.2.3:1234", ""},
+	} {
+		r := newRequest(tc.addr)
+		if _, err := m.MatchWithError(r); err != nil {
+			t.Fatal(err)
+		}
+		repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
+		if v, _ := repl.Get("geoip.risk"); v != tc.want {
+			t.Errorf("%s: {geoip.risk} = %q, want %q", tc.addr, v, tc.want)
 		}
 	}
 }
@@ -229,13 +364,41 @@ func TestAnonFlagsMask(t *testing.T) {
 		// A file that sets a kind without the umbrella still reports both.
 		{anonFlags{VPN: true}, 3},
 		{anonFlags{Tor: true, Hosting: true}, 1 | 4 | 8},
-		{anonFlags{true, true, true, true, true, true}, 63},
+		{anonFlags{Anonymous: true, VPN: true, Tor: true, Hosting: true, PublicProxy: true, ResidentialProxy: true}, 63},
 	} {
-		if got := tc.f.mask(); got != tc.want {
+		if got := tc.f.mask(0); got != tc.want {
 			t.Errorf("%+v: mask %d, want %d", tc.f, got, tc.want)
 		}
 	}
 }
+
+// TestAnonFlagsMaskConfidence pins the cutoff: it drops public_proxy and
+// residential_proxy, together, when the record carries a confidence below
+// it, and touches nothing else. A record without one is not judged.
+func TestAnonFlagsMaskConfidence(t *testing.T) {
+	both := anonFlags{Anonymous: true, PublicProxy: true, ResidentialProxy: true}
+	for _, tc := range []struct {
+		name   string
+		f      anonFlags
+		cutoff uint8
+		want   uint8
+	}{
+		{"below cutoff drops both proxies, keeps the umbrella", withConf(both, 54), 60, 1},
+		{"at cutoff keeps both", withConf(both, 54), 54, 1 | 16 | 32},
+		{"no confidence is not judged, flags stand", both, 99, 1 | 16 | 32},
+		{"a confidence of 0 is a confidence, and below any cutoff", withConf(both, 0), 1, 1},
+		{"no cutoff", withConf(both, 1), 0, 1 | 16 | 32},
+		{"only the set proxy is affected", withConf(anonFlags{Anonymous: true, PublicProxy: true}, 12), 30, 1},
+		{"vpn and tor are never in doubt", withConf(anonFlags{Anonymous: true, VPN: true, Tor: true, PublicProxy: true}, 12), 30, 1 | 2 | 4},
+		{"hosting is never in doubt", withConf(anonFlags{Anonymous: true, Hosting: true}, 12), 30, 1 | 8},
+	} {
+		if got := tc.f.mask(tc.cutoff); got != tc.want {
+			t.Errorf("%s: mask %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
+func withConf(f anonFlags, c uint16) anonFlags { f.Confidence = &c; return f }
 
 func TestAnonNames(t *testing.T) {
 	for mask, want := range map[uint8]string{

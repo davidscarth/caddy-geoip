@@ -341,29 +341,29 @@ func TestClientIP(t *testing.T) {
 		clientVar  string // "" means the var is not set
 		want       string // "" means an invalid Addr
 	}{
-		{"ipv4 with port", "1.2.3.4:5678", "", "1.2.3.4"},
-		{"ipv6 with port", "[2001:db8::1]:443", "", "2001:db8::1"},
-		{"ipv4-mapped ipv6 is unmapped", "[::ffff:1.2.3.4]:443", "", "1.2.3.4"},
-		{"ipv6 zone is stripped", "[fe80::1%eth0]:443", "", "fe80::1"},
-		{"bare ipv4 from client_ip var", "10.0.0.1:443", "1.2.3.4", "1.2.3.4"},
-		{"bare ipv6 from client_ip var", "10.0.0.1:443", "2001:db8::1", "2001:db8::1"},
-		{"bare ipv6 with zone from var", "10.0.0.1:443", "fe80::1%eth0", "fe80::1"},
-		{"ipv4-mapped ipv6 from var", "10.0.0.1:443", "::ffff:1.2.3.4", "1.2.3.4"},
-		{"ipv4 with port from var", "10.0.0.1:443", "1.2.3.4:5678", "1.2.3.4"},
-		{"ipv6 with port from var", "10.0.0.1:443", "[2001:db8::1]:443", "2001:db8::1"},
-		{"bracketed ipv6 without a port from var", "10.0.0.1:443", "[2001:db8::1]", ""},
-		{"garbage from var", "10.0.0.1:443", "not-an-address", ""},
+		{name: "ipv4 with port", remoteAddr: "1.2.3.4:5678", want: "1.2.3.4"},
+		{name: "ipv6 with port", remoteAddr: "[2001:db8::1]:443", want: "2001:db8::1"},
+		{name: "ipv4-mapped ipv6 is unmapped", remoteAddr: "[::ffff:1.2.3.4]:443", want: "1.2.3.4"},
+		{name: "ipv6 zone is stripped", remoteAddr: "[fe80::1%eth0]:443", want: "fe80::1"},
+		{name: "bare ipv4 from client_ip var", remoteAddr: "10.0.0.1:443", clientVar: "1.2.3.4", want: "1.2.3.4"},
+		{name: "bare ipv6 from client_ip var", remoteAddr: "10.0.0.1:443", clientVar: "2001:db8::1", want: "2001:db8::1"},
+		{name: "bare ipv6 with zone from var", remoteAddr: "10.0.0.1:443", clientVar: "fe80::1%eth0", want: "fe80::1"},
+		{name: "ipv4-mapped ipv6 from var", remoteAddr: "10.0.0.1:443", clientVar: "::ffff:1.2.3.4", want: "1.2.3.4"},
+		{name: "ipv4 with port from var", remoteAddr: "10.0.0.1:443", clientVar: "1.2.3.4:5678", want: "1.2.3.4"},
+		{name: "ipv6 with port from var", remoteAddr: "10.0.0.1:443", clientVar: "[2001:db8::1]:443", want: "2001:db8::1"},
+		{name: "bracketed ipv6 without a port from var", remoteAddr: "10.0.0.1:443", clientVar: "[2001:db8::1]"},
+		{name: "garbage from var", remoteAddr: "10.0.0.1:443", clientVar: "not-an-address"},
 		// An unbracketed IPv6 with a trailing port is itself a valid
 		// IPv6 address, so it parses as one. No parser can tell the
 		// two readings apart; this pins that it is looked up as the
 		// address rather than treated as unknown.
-		{"unbracketed ipv6 with trailing port from var", "10.0.0.1:443", "2001:db8::1:443", "2001:db8::1:443"},
-		{"bare ipv4 in RemoteAddr", "1.2.3.4", "", "1.2.3.4"},
-		{"bracketed ipv6 without a port", "[2001:db8::1]", "", ""},
-		{"unix socket", "@", "", ""},
-		{"empty", "", "", ""},
-		{"garbage", "not-an-address", "", ""},
-		{"port but no host", ":443", "", ""},
+		{name: "unbracketed ipv6 with trailing port from var", remoteAddr: "10.0.0.1:443", clientVar: "2001:db8::1:443", want: "2001:db8::1:443"},
+		{name: "bare ipv4 in RemoteAddr", remoteAddr: "1.2.3.4", want: "1.2.3.4"},
+		{name: "bracketed ipv6 without a port", remoteAddr: "[2001:db8::1]"},
+		{name: "unix socket", remoteAddr: "@"},
+		{name: "empty", remoteAddr: ""},
+		{name: "garbage", remoteAddr: "not-an-address"},
+		{name: "port but no host", remoteAddr: ":443"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newRawRequest(tc.remoteAddr)
@@ -470,9 +470,9 @@ func TestCountryTakesSubdivisionAlong(t *testing.T) {
 		addr string
 		want string
 	}{
-		{"same country keeps it", countryDB, "216.160.83.56:1234", "US-WA"},
-		{"no record keeps it", cityDB, "50.114.0.1:1234", "US-WA"},
-		{"different country clears it", countryDB, "[2001:218::1]:1234", "JP-"},
+		{name: "same country keeps it", db: countryDB, addr: "216.160.83.56:1234", want: "US-WA"},
+		{name: "no record keeps it", db: cityDB, addr: "50.114.0.1:1234", want: "US-WA"},
+		{name: "different country clears it", db: countryDB, addr: "[2001:218::1]:1234", want: "JP-"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := MatchGeoIPCountry{DB: tc.db, Countries: []string{"US"}}

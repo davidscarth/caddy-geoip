@@ -57,7 +57,7 @@ func openDB(logger *slog.Logger, path string, types ...string) (*maxminddb.Reade
 	}
 	dbType := db.Metadata.DatabaseType
 	if !hasType(dbType, types) {
-		_ = db.Close()
+		_ = db.Close() // the config error is the one to report, here and below
 		return nil, fmt.Errorf("db %s is a %s database, expected %s",
 			path, dbType, strings.Join(types, " or "))
 	}
@@ -138,16 +138,15 @@ func resolve(r *http.Request, decode func(netip.Addr) (string, error)) (string, 
 	return "", nil
 }
 
-// lookupPlace returns the country code, the most specific subdivision
-// code, and whether the client of r matched, all decoded from one
-// record by decode, and exposes the codes as the {geoip.country} and
+// lookupPlace returns what decode reads from the one record for the
+// client of r, and exposes the codes as the {geoip.country} and
 // {geoip.subdivision} placeholders. An IP that cannot be resolved
 // yields two empty strings and no match.
-func lookupPlace(r *http.Request, decode func(netip.Addr) (string, string, bool, error)) (string, string, bool, error) {
-	var country, subdivision string
-	var matched bool
+func lookupPlace(
+	r *http.Request,
+	decode func(netip.Addr) (country, subdivision string, matched bool, err error),
+) (country, subdivision string, matched bool, err error) {
 	if ip := clientIP(r); ip.IsValid() {
-		var err error
 		if country, subdivision, matched, err = decode(ip); err != nil {
 			return "", "", false, err
 		}

@@ -220,7 +220,8 @@ func TestSubdivisionMissingFieldsDeferToValidate(t *testing.T) {
 
 		err := tc.m.Validate()
 		if err == nil {
-			t.Fatalf("%s: expected Validate to reject", tc.name)
+			t.Errorf("%s: expected Validate to reject", tc.name)
+			continue
 		}
 		if !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: Validate() error = %v, want one mentioning %q", tc.name, err, tc.want)
@@ -236,20 +237,20 @@ func TestSubdivisionMatch(t *testing.T) {
 		addr         string
 		want         bool
 	}{
-		{"state matches", "US", []string{"WA"}, "216.160.83.56:1234", true},
-		{"one of several", "US", []string{"CA", "NY", "WA"}, "216.160.83.56:1234", true},
-		{"other state", "US", []string{"CA"}, "216.160.83.56:1234", false},
-		{"lower case config", "us", []string{"wa"}, "216.160.83.56:1234", true},
-		{"single character code", "SE", []string{"E"}, "89.160.20.128:1234", true},
-		{"three character code", "GB", []string{"ENG"}, "81.2.69.142:1234", true},
+		{name: "state matches", country: "US", subdivisions: []string{"WA"}, addr: "216.160.83.56:1234", want: true},
+		{name: "one of several", country: "US", subdivisions: []string{"CA", "NY", "WA"}, addr: "216.160.83.56:1234", want: true},
+		{name: "other state", country: "US", subdivisions: []string{"CA"}, addr: "216.160.83.56:1234", want: false},
+		{name: "lower case config", country: "us", subdivisions: []string{"wa"}, addr: "216.160.83.56:1234", want: true},
+		{name: "single character code", country: "SE", subdivisions: []string{"E"}, addr: "89.160.20.128:1234", want: true},
+		{name: "three character code", country: "GB", subdivisions: []string{"ENG"}, addr: "81.2.69.142:1234", want: true},
 		// The country scopes the subdivision: WA is a US state, so a
 		// GB rule must not match it even though the code is listed.
-		{"country scopes the code", "GB", []string{"WA"}, "216.160.83.56:1234", false},
+		{name: "country scopes the code", country: "GB", subdivisions: []string{"WA"}, addr: "216.160.83.56:1234", want: false},
 		// Boxford reports ENG then WBK; the client is in both.
-		{"innermost matches", "GB", []string{"WBK"}, "2.125.160.216:1234", true},
-		{"outer level matches", "GB", []string{"ENG"}, "2.125.160.216:1234", true},
+		{name: "innermost matches", country: "GB", subdivisions: []string{"WBK"}, addr: "2.125.160.216:1234", want: true},
+		{name: "outer level matches", country: "GB", subdivisions: []string{"ENG"}, addr: "2.125.160.216:1234", want: true},
 		// A native IPv6 record that carries a subdivision.
-		{"native IPv6", "US", []string{"CA"}, "[2001:480::1]:1234", true},
+		{name: "native IPv6", country: "US", subdivisions: []string{"CA"}, addr: "[2001:480::1]:1234", want: true},
 	}
 
 	for _, tc := range tests {
@@ -275,10 +276,10 @@ func TestSubdivisionMatchUnknown(t *testing.T) {
 		addr    string
 	}{
 		// Not in the database at all.
-		{"absent", "US", "10.1.2.3:1234"},
+		{name: "absent", country: "US", addr: "10.1.2.3:1234"},
 		// In the database and in the configured country, but the
 		// record carries no subdivisions.
-		{"country without subdivisions", "BT", "67.43.156.1:1234"},
+		{name: "country without subdivisions", country: "BT", addr: "67.43.156.1:1234"},
 	}
 
 	for _, tc := range tests {

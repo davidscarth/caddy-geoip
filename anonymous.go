@@ -5,6 +5,7 @@ package caddygeoip
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/oschwald/maxminddb-golang/v2"
@@ -20,7 +21,8 @@ func init() {
 
 // MatchGeoIPAnonymous matches VPNs, Tor, proxies, and hosting providers
 // using MaxMind-compatible GeoIP databases: a small, fast, and safe
-// geolocation matcher. It sets {geoip.anonymous}.
+// geolocation matcher. It sets {geoip.anonymous}, {geoip.confidence},
+// and {geoip.risk}.
 //
 // An address the database does not flag is just not anonymous, so there
 // is no match_unknown.
@@ -34,9 +36,25 @@ type MatchGeoIPAnonymous struct {
 	// MaxMind's umbrella flag, set whenever any other is.
 	Types []string `json:"types,omitempty"`
 
+	// Least anonymizer_confidence, 1 to 99, for a public_proxy or
+	// residential_proxy to count. Only a record that carries a confidence
+	// is judged by it; without one the flags stand as published, as vpn,
+	// tor, and hosting always do. Needs an Anonymous Plus or IP Risk
+	// database and a proxy type.
+	MinConfidence uint8 `json:"min_confidence,omitempty"`
+
+	// Least ip_risk, 1 to 99, to match whatever the flags say: a risky
+	// address is risky. Needs an IP Risk database. With it, type may be
+	// left out.
+	MinRisk uint8 `json:"min_risk,omitempty"`
+
 	types uint8
 	db    *maxminddb.Reader
 }
+
+// proxyKinds are the bits confidence applies to: public_proxy and
+// residential_proxy, the two kinds MaxMind infers rather than knows.
+const proxyKinds = 1<<4 | 1<<5
 
 // anonKinds lists the kinds in the order {geoip.anonymous} reports
 // them. Bit i of a mask is kind i.
@@ -48,17 +66,21 @@ var anonKinds = [...]string{
 // MaxMind writes only the flags that are true, so an absent one is
 // false, and a clean address decodes to the zero value.
 type anonFlags struct {
-	Anonymous        bool `maxminddb:"is_anonymous"`
-	VPN              bool `maxminddb:"is_anonymous_vpn"`
-	Tor              bool `maxminddb:"is_tor_exit_node"`
-	Hosting          bool `maxminddb:"is_hosting_provider"`
-	PublicProxy      bool `maxminddb:"is_public_proxy"`
-	ResidentialProxy bool `maxminddb:"is_residential_proxy"`
+	Anonymous        bool     `maxminddb:"is_anonymous"`
+	VPN              bool     `maxminddb:"is_anonymous_vpn"`
+	Tor              bool     `maxminddb:"is_tor_exit_node"`
+	Hosting          bool     `maxminddb:"is_hosting_provider"`
+	PublicProxy      bool     `maxminddb:"is_public_proxy"`
+	ResidentialProxy bool     `maxminddb:"is_residential_proxy"`
+	Confidence       *uint16  `maxminddb:"anonymizer_confidence"` // nil when the record has none
+	Risk             *float64 `maxminddb:"ip_risk"`
 }
 
-// mask packs the flags into bits in anonKinds order. The anonymous bit
-// is set whenever any other is, since it is the umbrella.
-func (f anonFlags) mask() uint8 {
+// mask packs the flags into bits in anonKinds order. A proxy whose
+// confidence is below cutoff (0 for none) is dropped; one with no
+// confidence is kept, and the other kinds and the umbrella stand as
+// published. The anonymous bit is set whenever any other is.
+func (f anonFlags) mask(cutoff uint8) uint8 {
 	var m uint8
 	for i, set := range [...]bool{
 		f.Anonymous, f.VPN, f.Tor, f.Hosting, f.PublicProxy, f.ResidentialProxy,
@@ -66,6 +88,9 @@ func (f anonFlags) mask() uint8 {
 		if set {
 			m |= 1 << i
 		}
+	}
+	if f.Confidence != nil && *f.Confidence < uint16(cutoff) {
+		m &^= proxyKinds
 	}
 	if m != 0 {
 		m |= 1
@@ -97,11 +122,11 @@ func (MatchGeoIPAnonymous) CaddyModule() caddy.ModuleInfo {
 	}
 }
 
-// Provision builds the kind mask and opens the database. A missing db
-// or type is left for Validate to report, so the database isn't opened
-// for a config that is about to be refused.
+// Provision builds the kind mask and opens the database. A missing db,
+// or no type and no risk, is left for Validate to report, so the
+// database isn't opened for a config that is about to be refused.
 func (m *MatchGeoIPAnonymous) Provision(ctx caddy.Context) error {
-	if m.DB == "" || len(m.Types) == 0 {
+	if m.DB == "" || len(m.Types) == 0 && m.MinRisk == 0 {
 		return nil
 	}
 	for _, t := range m.Types {
@@ -111,9 +136,23 @@ func (m *MatchGeoIPAnonymous) Provision(ctx caddy.Context) error {
 		}
 		m.types |= 1 << i
 	}
+	if m.MinConfidence > 99 || m.MinRisk > 99 {
+		return fmt.Errorf("confidence and risk must be 1 to 99")
+	}
+	if m.MinConfidence > 0 && m.types&proxyKinds == 0 {
+		return fmt.Errorf("confidence applies to public_proxy and residential_proxy, so type needs one of them")
+	}
 	var err error
-	m.db, err = openDB(ctx.Slogger(), m.DB, "anonymous", "ip-risk")
-	return err
+	if m.db, err = openDB(ctx.Slogger(), m.DB, "anonymous", "ip-risk"); err != nil {
+		return err
+	}
+	if m.MinConfidence > 0 && !hasType(m.db.Metadata.DatabaseType, []string{"anonymous-plus", "ip-risk"}) {
+		return fmt.Errorf("confidence needs an Anonymous Plus or IP Risk database, not %s", m.db.Metadata.DatabaseType)
+	}
+	if m.MinRisk > 0 && !hasType(m.db.Metadata.DatabaseType, []string{"ip-risk"}) {
+		return fmt.Errorf("risk needs an IP Risk database, not %s", m.db.Metadata.DatabaseType)
+	}
+	return nil
 }
 
 // anonKind returns the index of kind in anonKinds, and whether it is one.
@@ -131,14 +170,14 @@ func (m *MatchGeoIPAnonymous) Validate() error {
 	if m.DB == "" {
 		return fmt.Errorf("db is required")
 	}
-	if len(m.Types) == 0 {
-		return fmt.Errorf("at least one type is required")
+	if len(m.Types) == 0 && m.MinRisk == 0 {
+		return fmt.Errorf("at least one type, or a risk, is required")
 	}
 	return nil
 }
 
 // MatchWithError returns true if the client of r is flagged with one
-// of the configured kinds.
+// of the configured kinds, or scores at or above the configured risk.
 func (m *MatchGeoIPAnonymous) MatchWithError(r *http.Request) (bool, error) {
 	if err := guard(r, "geoip_anonymous", m.db); err != nil {
 		return false, err
@@ -152,16 +191,27 @@ func (m *MatchGeoIPAnonymous) MatchWithError(r *http.Request) (bool, error) {
 			return false, fmt.Errorf("geoip_anonymous: %s: %w", m.DB, err)
 		}
 	}
-	mask := f.mask()
+	mask := f.mask(m.MinConfidence)
 	setPlaceholder(r, "geoip.anonymous", anonNames[mask])
-	return mask&m.types != 0, nil
+	var confidence, risk string
+	if f.Confidence != nil {
+		confidence = strconv.Itoa(int(*f.Confidence))
+	}
+	if f.Risk != nil {
+		risk = strconv.FormatFloat(*f.Risk, 'f', -1, 64)
+	}
+	setPlaceholder(r, "geoip.confidence", confidence)
+	setPlaceholder(r, "geoip.risk", risk)
+	return mask&m.types != 0 || m.MinRisk != 0 && f.Risk != nil && *f.Risk >= float64(m.MinRisk), nil
 }
 
 // UnmarshalCaddyfile sets up the matcher from Caddyfile tokens. Syntax:
 //
 //	geoip_anonymous {
-//	    db   <path>
-//	    type <kinds...>
+//	    db         <path>
+//	    type       <kinds...>
+//	    confidence <min>
+//	    risk       <min>
 //	}
 func (m *MatchGeoIPAnonymous) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 	// iterate to merge multiple matchers into one
@@ -189,6 +239,20 @@ func (m *MatchGeoIPAnonymous) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 					}
 				}
 				m.Types = append(m.Types, args...)
+			case "confidence", "risk":
+				name, cutoff := d.Val(), &m.MinConfidence
+				if name == "risk" {
+					cutoff = &m.MinRisk
+				}
+				var s string
+				if !d.AllArgs(&s) {
+					return d.ArgErr()
+				}
+				n, err := strconv.ParseUint(s, 10, 8)
+				if err != nil || n == 0 || n > 99 {
+					return d.Errf("invalid %s %q: 1 to 99", name, s)
+				}
+				*cutoff = uint8(n)
 			default:
 				return d.Errf("unrecognized subdirective '%s'", d.Val())
 			}

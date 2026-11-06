@@ -18,7 +18,7 @@ import (
 )
 
 func TestASNUnmarshalCaddyfile(t *testing.T) {
-	for i, tc := range []struct {
+	for _, tc := range []struct {
 		input       string
 		wantASNs    int
 		wantFiles   []string
@@ -153,44 +153,37 @@ func TestASNUnmarshalCaddyfile(t *testing.T) {
 	} {
 		var m MatchGeoIPASN
 		err := m.UnmarshalCaddyfile(caddyfile.NewTestDispenser(tc.input))
-		if tc.wantErr {
-			if err == nil {
-				t.Errorf("Test %d: UnmarshalCaddyfile() error = nil, want error", i)
-			}
-			continue
+		if (err != nil) != tc.wantErr {
+			t.Errorf("UnmarshalCaddyfile(%q) error = %v, wantErr %v", tc.input, err, tc.wantErr)
 		}
-		if err != nil {
-			t.Errorf("Test %d: unexpected error: %v", i, err)
+		if err != nil || tc.wantErr {
 			continue
 		}
 		if len(m.ASNs) != tc.wantASNs {
-			t.Errorf("Test %d: got %d asns, want %d", i, len(m.ASNs), tc.wantASNs)
+			t.Errorf("UnmarshalCaddyfile(%q) got %d asns, want %d", tc.input, len(m.ASNs), tc.wantASNs)
 		}
 		if !slices.Equal(m.ASNFiles, tc.wantFiles) {
-			t.Errorf("Test %d: asn_file = %q, want %q", i, m.ASNFiles, tc.wantFiles)
+			t.Errorf("UnmarshalCaddyfile(%q) asn_file = %q, want %q", tc.input, m.ASNFiles, tc.wantFiles)
 		}
 		if m.MatchUnknown != tc.wantUnknown {
-			t.Errorf("Test %d: match_unknown = %v, want %v", i, m.MatchUnknown, tc.wantUnknown)
+			t.Errorf("UnmarshalCaddyfile(%q) match_unknown = %v, want %v", tc.input, m.MatchUnknown, tc.wantUnknown)
 		}
 	}
 }
 
 func TestASNValidate(t *testing.T) {
-	for i, tc := range []struct {
+	for _, tc := range []struct {
+		name    string
 		m       MatchGeoIPASN
 		wantErr bool
 	}{
-		{m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb", ASNs: []uint32{16509}}},
-		{m: MatchGeoIPASN{ASNs: []uint32{16509}}, wantErr: true},
-		{m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb"}, wantErr: true},
-		{m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb", ASNFiles: []string{"/tmp/asndrop.json"}}},
+		{name: "complete", m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb", ASNs: []uint32{16509}}},
+		{name: "no db", m: MatchGeoIPASN{ASNs: []uint32{16509}}, wantErr: true},
+		{name: "no asns", m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb"}, wantErr: true},
+		{name: "file only", m: MatchGeoIPASN{DB: "/tmp/ASN.mmdb", ASNFiles: []string{"/tmp/asndrop.json"}}},
 	} {
-		err := tc.m.Validate()
-		if tc.wantErr && err == nil {
-			t.Errorf("Test %d: Validate() error = nil, want error", i)
-		}
-		if !tc.wantErr && err != nil {
-			t.Errorf("Test %d: unexpected error: %v", i, err)
+		if err := tc.m.Validate(); (err != nil) != tc.wantErr {
+			t.Errorf("%s: Validate() error = %v, wantErr %v", tc.name, err, tc.wantErr)
 		}
 	}
 }
@@ -215,11 +208,11 @@ func TestASNFile(t *testing.T) {
 	plain := write("asns.txt", "# hosting\n\n1221\n  64496  \r\n")
 	named := write("bad-asn-list.txt", "AS1221 Telstra Corporation Ltd\nas64496 Example, LLC\n64497\t# tabbed comment\n")
 	huge := write("huge.txt", "1221\n")
-	if err := os.Truncate(huge, 16<<20+1); err != nil {
+	if err := os.Truncate(huge, maxListBytes+1); err != nil {
 		t.Fatal(err)
 	}
 
-	for i, tc := range []struct {
+	for _, tc := range []struct {
 		file    string
 		inline  []uint32
 		wantLen int
@@ -243,7 +236,7 @@ func TestASNFile(t *testing.T) {
 		{file: write("mixed.txt", "12a21\n"), wantErr: "mixed.txt:1"},
 		{file: write("zero.txt", "0\n"), wantErr: "zero.txt:1"},
 		{file: write("big.txt", "4294967296\n"), wantErr: "big.txt:1"},
-		{file: write("badjson.json", "{\"asn\":\n"), wantErr: "not an acceptable list"},
+		{file: write("badjson.json", "{\"asn\":\n"), wantErr: "badjson.json:1"},
 		{file: write("bigjson.json", `{"asn":4294967296}`+"\n"), wantErr: "bigjson.json:1"},
 		{file: write("bom.txt", "\ufeff1221\n64496\n"), wantLen: 2},
 		{file: write("utf16.txt", "\xff\xfe1\x002\x002\x001\x00\r\x00\n\x00"), wantErr: "UTF-16"},
@@ -256,6 +249,9 @@ func TestASNFile(t *testing.T) {
 		{file: write("column.txt", "ASN\n1221\n"), wantLen: 1},
 		{file: write("tomsk.txt", "AS5567 AS5567 (Tomsk Polytechnic)\n"), wantLen: 1},
 		{file: write("twice.txt", "AS42772 AS42772\nAS1 Foo\n"), wantLen: 2},
+		{file: write("ranked.txt", "1 AS4134 Chinanet\n2 AS4837 Unicom\n3 9808 Mobile\n"), wantLen: 3},
+		{file: write("bare-ranks.csv", "1,4134,Chinanet\n2,4837,Unicom\n"), wantErr: "not an acceptable list"},
+		{file: write("urls.csv", "https://bgp.he.net/AS1221,AS1221,Telstra\nhttps://bgp.he.net/AS64496,AS64496,Example\n"), wantLen: 2},
 
 		// A line of numbers is a list on its own and columns otherwise.
 		{file: write("oneline.csv", "1221,64496,64497\n"), wantLen: 3},
@@ -278,6 +274,17 @@ func TestASNFile(t *testing.T) {
 		{file: write("nro.txt", "2.3|nro|20261101|1\nnro|US|asn|1221|1|20010920|assigned\n"), wantErr: "nro.txt:1: invalid asn"},
 		{file: write("pretty.json", "{\n  \"asn\": 1221\n}\n"), wantLen: 1},
 		{file: write("array.json", "[\n  {\"ASN\": 174},\n  {\"ASN\": 612}\n]\n"), wantLen: 2},
+		{file: write("minified.json", "[{\"asn\": 174}, {\"asn\": 612}, {\"asn\": 1221}]\n"), wantLen: 3},
+		{file: write("cut.json", "{\"asn\":1221}\n{\"asn\":6449"), wantErr: "cut.json:2"},
+		{file: write("rules3.txt", "(ip.geoip.asnum in {\n  1234 5678\n})\n"), wantLen: 2},
+		{file: write("rules4.txt", "(ip.src.asnum eq 174) OR (ip.src.asnum eq 612)\n"), wantLen: 2},
+		{file: write("rulesnot2.txt", "(not ip.geoip.asnum in {\n  1234 5678\n})\n"), wantErr: "not an acceptable list"},
+		{file: write("badvalue.json", "[{\"asn\":1221},{\"asn\":\"x\"}]\n"), wantErr: "badvalue.json:1: invalid asn"},
+		{file: write("quoted.json", "{\"asn\":\"1221\"}\n"), wantLen: 1},
+		{file: write("negative.txt", "-1234\n5678\n"), wantErr: "negative.txt:1: invalid asn"},
+		{file: write("aligned.md", "| ASN | Name |\n|:---:|---:|\n| 18779 | EGIHosting |\n"), wantLen: 1},
+		{file: write("dash-cell.csv", "Org,ASN\n-,1221\nTelstra,64496\n"), wantLen: 2},
+		{file: write("url-comment.txt", "1221 https://example.com // Telstra\n"), wantLen: 1},
 		{file: write("rules.txt", "(ip.geoip.asnum in { 16509 13335 })\n"), wantLen: 2},
 		{file: write("rules2.txt", "(ip.geoip.asnum eq 174) or (ip.geoip.asnum eq 612)\n"), wantLen: 2},
 		{file: write("rulesbad.txt", "(ip.geoip.asnum eq 174) and (cf.threat_score gt 10)\n"), wantErr: "not an acceptable list"},
@@ -299,19 +306,19 @@ func TestASNFile(t *testing.T) {
 		err := m.Provision(caddy.Context{})
 		if tc.wantErr != "" {
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Errorf("Test %d: Provision() error = %v, want one containing %q", i, err, tc.wantErr)
+				t.Errorf("%s: Provision() error = %v, want one containing %q", filepath.Base(tc.file), err, tc.wantErr)
 			}
 			continue
 		}
 		if err != nil {
-			t.Errorf("Test %d: unexpected error: %v", i, err)
+			t.Errorf("%s: unexpected error: %v", filepath.Base(tc.file), err)
 			continue
 		}
 		if len(m.asns) != tc.wantLen {
-			t.Errorf("Test %d: got %d asns, want %d", i, len(m.asns), tc.wantLen)
+			t.Errorf("%s: got %d asns, want %d", filepath.Base(tc.file), len(m.asns), tc.wantLen)
 		}
 		if err := m.Validate(); err != nil {
-			t.Errorf("Test %d: validate: %v", i, err)
+			t.Errorf("%s: validate: %v", filepath.Base(tc.file), err)
 		}
 	}
 
@@ -442,7 +449,7 @@ func TestASNMatch(t *testing.T) {
 		t.Fatalf("validate: %v", err)
 	}
 
-	for i, tc := range []struct {
+	for _, tc := range []struct {
 		remoteAddr string
 		want       bool
 	}{
@@ -453,11 +460,11 @@ func TestASNMatch(t *testing.T) {
 	} {
 		got, err := m.MatchWithError(newRequest(tc.remoteAddr))
 		if err != nil {
-			t.Errorf("Test %d: unexpected error: %v", i, err)
+			t.Errorf("%s: unexpected error: %v", tc.remoteAddr, err)
 			continue
 		}
 		if got != tc.want {
-			t.Errorf("Test %d: %s: MatchWithError() = %v, want %v", i, tc.remoteAddr, got, tc.want)
+			t.Errorf("%s: MatchWithError() = %v, want %v", tc.remoteAddr, got, tc.want)
 		}
 	}
 }
@@ -471,9 +478,9 @@ func TestASNAcrossDatabaseEditions(t *testing.T) {
 		name, db, addr string
 		asn            uint32
 	}{
-		{"GeoLite2-ASN", asnDB, "1.128.0.1:1234", 1221},
-		{"GeoIP2-ISP", ispDB, "1.128.0.1:1234", 1221},
-		{"GeoIP2-Enterprise", entDB, "74.209.24.1:1234", 14671},
+		{name: "GeoLite2-ASN", db: asnDB, addr: "1.128.0.1:1234", asn: 1221},
+		{name: "GeoIP2-ISP", db: ispDB, addr: "1.128.0.1:1234", asn: 1221},
+		{name: "GeoIP2-Enterprise", db: entDB, addr: "74.209.24.1:1234", asn: 14671},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := MatchGeoIPASN{DB: tc.db, ASNs: []uint32{tc.asn}}
