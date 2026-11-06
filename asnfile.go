@@ -124,23 +124,20 @@ func (p *parser) parseJSON(text string) error {
 }
 
 // parseText tokenizes every line, decides once which column holds the
-// number, then reads each row by that decision.
+// number, then reads each row by that decision or refuses it as ambiguous.
 func (p *parser) parseText(text string) error {
-	var rows [][]string
-	var at []int
-	for i, l := range strings.Split(text, "\n") {
-		toks := strings.FieldsFunc(comment.ReplaceAllString(strings.TrimSpace(l), "$1"), isSep)
-		for k, t := range toks {
-			toks[k] = strings.Trim(t, `"'(){}[]`)
-		}
-		toks = slices.DeleteFunc(toks, func(t string) bool { return t == "" })
-		if slices.ContainsFunc(toks, func(t string) bool { return strings.Trim(t, "-:") != "" }) { // not a Markdown divider
-			rows, at = append(rows, toks), append(at, i+1)
-		}
-	}
-	col, headed, second, pairs := 0, false, 0, 0
+	lines := strings.Split(text, "\n")
+	rows, at := tokenize(lines, isSep)
+	col, ncols, headed, second, pairs := 0, 0, false, 0, 0
 	if len(rows) > 0 && named(rows[0]) >= 0 && !slices.ContainsFunc(rows[0], isASN) {
-		col, headed, rows, at = named(rows[0]), true, rows[1:], at[1:] // a header naming the column
+		// A delimited header's cells may hold spaces, so split on its delimiter alone.
+		if i := strings.IndexAny(lines[at[0]-1], ",;\t|"); i >= 0 {
+			delim := rune(lines[at[0]-1][i])
+			rows, at = tokenize(lines, func(r rune) bool { return r == delim })
+		}
+		if col, ncols, headed, rows, at = named(rows[0]), len(rows[0]), true, rows[1:], at[1:]; col < 0 {
+			return p.refuse() // the name is behind a second delimiter
+		}
 	}
 	rule := slices.ContainsFunc(rows, func(r []string) bool { return slices.ContainsFunc(r, isCFField) })
 	for _, r := range rows {
@@ -171,7 +168,15 @@ func (p *parser) parseText(text string) error {
 			}
 			r = r[:1]
 		default:
-			r = []string{cell(r, col)}
+			// A cell may read "18779 EGIHosting". A bare number beside another
+			// is a rank or a count, unless a header settled it and no cell before it split.
+			t, rest, _ := strings.Cut(cell(r, col), " ")
+			n, _ := parseASN(t)
+			rival := func(o string) bool { m, ok := parseASN(o); return ok && m != n }
+			if isBare(t) && (slices.ContainsFunc(strings.Fields(rest), rival) || (!headed || col > 0 && len(r) > ncols) && slices.ContainsFunc(r, rival)) {
+				return p.fail(at[k], strings.Join(r, " "))
+			}
+			r = []string{t}
 		}
 		if err := p.add(at[k], r...); err != nil {
 			return err
@@ -180,9 +185,26 @@ func (p *parser) parseText(text string) error {
 	return nil
 }
 
-// named is the index of the column a header names as the ASN, or -1.
+// tokenize is the rows of lines split at sep, with their line numbers.
+func tokenize(lines []string, sep func(rune) bool) (rows [][]string, at []int) {
+	for i, l := range lines {
+		toks := strings.FieldsFunc(comment.ReplaceAllString(strings.TrimSpace(l), "$1"), sep)
+		for k, t := range toks {
+			toks[k] = strings.Trim(t, "\"'(){}[] \t")
+		}
+		toks = slices.DeleteFunc(toks, func(t string) bool { return t == "" })
+		if slices.ContainsFunc(toks, func(t string) bool { return strings.Trim(t, "-:") != "" }) { // not a Markdown divider
+			rows, at = append(rows, toks), append(at, i+1)
+		}
+	}
+	return rows, at
+}
+
+// named is the index of the column whose words name the ASN, or -1.
 func named(h []string) int {
-	return slices.IndexFunc(h, func(t string) bool { return slices.Contains(colNames, strings.ToLower(t)) })
+	return slices.IndexFunc(h, func(c string) bool {
+		return slices.ContainsFunc(strings.Fields(c), func(t string) bool { return slices.Contains(colNames, strings.ToLower(t)) })
+	})
 }
 
 // cell is r[j], or "" when r has no such column.
