@@ -193,12 +193,14 @@ func (m *MatchGeoIPAnonymous) MatchWithError(r *http.Request) (bool, error) {
 	}
 	mask := f.mask(m.MinConfidence)
 	setPlaceholder(r, "geoip.anonymous", anonNames[mask])
-	var confidence, risk string
+	// Numbers, not strings: the replacer formats them only when a
+	// placeholder is expanded, and boxing a small int is free.
+	var confidence, risk any = "", ""
 	if f.Confidence != nil {
-		confidence = strconv.Itoa(int(*f.Confidence))
+		confidence = int(*f.Confidence)
 	}
 	if f.Risk != nil {
-		risk = strconv.FormatFloat(*f.Risk, 'f', -1, 64)
+		risk = *f.Risk
 	}
 	setPlaceholder(r, "geoip.confidence", confidence)
 	setPlaceholder(r, "geoip.risk", risk)

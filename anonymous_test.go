@@ -301,7 +301,7 @@ func TestConfidencePlaceholder(t *testing.T) {
 			t.Fatal(err)
 		}
 		repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
-		if v, _ := repl.Get("geoip.confidence"); v != tc.want {
+		if v := repl.ReplaceAll("{geoip.confidence}", ""); v != tc.want {
 			t.Errorf("%s: {geoip.confidence} = %q, want %q", tc.addr, v, tc.want)
 		}
 	}
@@ -319,7 +319,7 @@ func TestConfidencePlaceholder(t *testing.T) {
 			t.Fatal(err)
 		}
 		repl := r.Context().Value(caddy.ReplacerCtxKey).(*caddy.Replacer)
-		if v, _ := repl.Get("geoip.risk"); v != tc.want {
+		if v := repl.ReplaceAll("{geoip.risk}", ""); v != tc.want {
 			t.Errorf("%s: {geoip.risk} = %q, want %q", tc.addr, v, tc.want)
 		}
 	}
