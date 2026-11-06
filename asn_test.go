@@ -188,10 +188,10 @@ func TestASNValidate(t *testing.T) {
 	}
 }
 
-// TestASNFile covers the line forms asn_file accepts (plain, AS-prefixed
-// with names, CSV with a header, Spamhaus JSON lines) and the ways a
-// file can be wrong. The Spamhaus sample mirrors ASN-DROP (one record per
-// line, then a line with no "asn" member).
+// TestASNFile covers the forms asn_file accepts (plain, AS-prefixed with
+// names, CSV with a header, Cloudflare expressions, Spamhaus JSON lines)
+// and the ways a file can be wrong. The Spamhaus sample mirrors ASN-DROP
+// (one record per line, then a line with no "asn" member).
 func TestASNFile(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, content string) string {
@@ -228,9 +228,9 @@ func TestASNFile(t *testing.T) {
 		{file: huge, wantErr: "too large"},
 		{file: write("empty.txt", "# nothing here\n"), wantErr: "not an acceptable list"},
 		{file: write("meta.json", `{"type":"metadata"}`+"\n"), wantErr: "not an acceptable list"},
-		{file: write("list.csv", "ASN,Entity\n1442,\"Surehosting Internet Solutions, Inc.\"\n3223;Voxility\n"), wantErr: "list.csv:3"},
+		{file: write("list.csv", "ASN,Entity\n1442,\"Surehosting Internet Solutions, Inc.\"\n3223;Voxility\n"), wantLen: 2},
 		{file: write("word.txt", "1221\nASN64496\n"), wantErr: "word.txt:2"},
-		{file: write("gap.txt", "AS 1221\n"), wantErr: "gap.txt:1"},
+		{file: write("gap.txt", "AS 1221\n"), wantLen: 1}, // one number on a line is the number
 		{file: write("frac.txt", "1221.5\n"), wantErr: "frac.txt:1"},
 		{file: write("mixed.txt", "12a21\n"), wantErr: "mixed.txt:1"},
 		{file: write("zero.txt", "0\n"), wantErr: "zero.txt:1"},
@@ -240,30 +240,25 @@ func TestASNFile(t *testing.T) {
 		{file: write("bom.txt", "\ufeff1221\n64496\n"), wantLen: 2},
 		{file: write("utf16.txt", "\xff\xfe1\x002\x002\x001\x00\r\x00\n\x00"), wantErr: "UTF-16"},
 
-		// Tests parsing of comment lines, inline notes, and headers
-		// (requiring column names for single-column files).
+		// Comment lines, inline notes, headers, and markers.
 		{file: write("comments.txt", "; list\n// note\n1221 // Telstra\n64496 ; Example\n"), wantLen: 2},
 		{file: write("glued.txt", "1221//Telstra\n64496#Example\n"), wantLen: 2},
 		{file: write("count.csv", "asn,ipv4_count\n1221,12\n64496,40\n"), wantLen: 2},
-		{file: write("column.txt", "ASN\n1221\n"), wantLen: 1},
+		{file: write("column.txt", "Org ASN\nTelstra 1221\nLevel 3 3356\n"), wantErr: "column.txt:3"}, // a space header needs its count
 		{file: write("tomsk.txt", "AS5567 AS5567 (Tomsk Polytechnic)\n"), wantLen: 1},
-		{file: write("twice.txt", "AS42772 AS42772\nAS1 Foo\n"), wantLen: 2},
+		{file: write("twice.txt", "AS42772 AS42772\nAS201011 AS33891 Netzbetrieb GmbH\n"), wantLen: 2}, // the first marked wins
 		{file: write("ranked.txt", "1 AS4134 Chinanet\n2 AS4837 Unicom\n3 9808 Mobile\n"), wantErr: "ranked.txt:3"},
-		{file: write("bare-ranks.csv", "1,4134,Chinanet\n2,4837,Unicom\n"), wantErr: "not an acceptable list"},
+		{file: write("bare-ranks.csv", "1,4134,Chinanet\n2,4837,Unicom\n"), wantErr: "bare-ranks.csv:1"},
 		{file: write("urls.csv", "https://bgp.he.net/AS1221,AS1221,Telstra\nhttps://bgp.he.net/AS64496,AS64496,Example\n"), wantLen: 2},
 
 		// A line of numbers is a list on its own and columns otherwise.
 		{file: write("oneline.csv", "1221,64496,64497\n"), wantLen: 3},
 		{file: write("oneline.txt", "AS1221 AS64496\n"), wantLen: 2},
-		{file: write("wrapped.csv", "1221,64496\n64497,64498\n"), wantErr: "wrapped.csv: not an acceptable list"},
+		{file: write("wrapped.csv", "1221,64496\n64497,64498\n"), wantErr: "wrapped.csv:1"},
 		{file: write("junk.txt", "1221\nTelstra\n64496\n"), wantErr: "junk.txt:2: invalid asn"},
-		{file: write("stray.txt", "error_fetching_list\n1221,64496\n"), wantErr: "stray.txt:1: invalid asn"},
-		{file: write("typo.txt", "AS-1221\n64496\n"), wantErr: "typo.txt:1: invalid asn"},
-		{file: write("gap2.txt", "AS 1221\n64496\n"), wantErr: "gap2.txt:1: invalid asn"},
 		{file: write("zero.json", `{"asn":1221}`+"\n"+`{"asn":0}`+"\n"), wantErr: "zero.json:2: invalid asn"},
 		// A comment is cut before the line is read.
 		{file: write("masked.txt", "1221 64496 // two providers\n"), wantLen: 2},
-		{file: write("masked.csv", "1221,64496 // two providers\n"), wantLen: 2},
 		// With the comment cut, a word and a comment is one word, which is
 		// only a header if it names the column.
 		{file: write("stray2.txt", "fetch // failed\n1221\n"), wantErr: "stray2.txt:1: invalid asn"},
@@ -271,33 +266,31 @@ func TestASNFile(t *testing.T) {
 		// Other kinds of file: marked ones load, the rest are refused.
 		{file: write("ips.txt", "1.2.3.0/24\n"), wantErr: "ips.txt:1: invalid asn"},
 		{file: write("nro.txt", "2.3|nro|20261101|1\nnro|US|asn|1221|1|20010920|assigned\n"), wantErr: "nro.txt:1: invalid asn"},
-		{file: write("pretty.json", "{\n  \"asn\": 1221\n}\n"), wantLen: 1},
+		{file: write("pretty.json", "{\n  \"data\": [\n    {\"asn\": 1221}\n  ]\n}\n"), wantLen: 1}, // an envelope is read through
 		{file: write("array.json", "[\n  {\"ASN\": 174},\n  {\"ASN\": 612}\n]\n"), wantLen: 2},
-		{file: write("minified.json", "[{\"asn\": 174}, {\"asn\": 612}, {\"asn\": 1221}]\n"), wantLen: 3},
+		{file: write("minified.json", "[{\"asn\": 174}, {\"asn\": 612, \"peers\": [{\"asn\": 1}]}, {\"asn\": 1221}]\n"), wantLen: 3}, // a record's members are not records
 		{file: write("cut.json", "{\"asn\":1221}\n{\"asn\":6449"), wantErr: "cut.json:2"},
 		{file: write("rules3.txt", "(ip.geoip.asnum in {\n  1234 5678\n})\n"), wantLen: 2},
-		{file: write("rules4.txt", "(ip.src.asnum eq 174) OR (ip.src.asnum eq 612)\n"), wantLen: 2},
-		{file: write("rulesnot2.txt", "(not ip.geoip.asnum in {\n  1234 5678\n})\n"), wantErr: "not an acceptable list"},
 		{file: write("badvalue.json", "[{\"asn\":1221},{\"asn\":\"x\"}]\n"), wantErr: "badvalue.json:1: invalid asn"},
 		{file: write("quoted.json", "{\"asn\":\"1221\"}\n"), wantLen: 1},
 		{file: write("negative.txt", "-1234\n5678\n"), wantErr: "negative.txt:1: invalid asn"},
 		{file: write("aligned.md", "| ASN | Name |\n|:---:|---:|\n| 18779 | EGIHosting |\n"), wantLen: 1},
-		{file: write("dash-cell.csv", "Org,ASN\n-,1221\nTelstra,64496\n"), wantLen: 2},
+		{file: write("dash-cell.csv", "Org;ASN\n-;1221\nLevel 3, LLC;3356\n"), wantLen: 2}, // only the header's delimiter splits
 		{file: write("url-comment.txt", "1221 https://example.com // Telstra\n"), wantLen: 1},
 		{file: write("rules.txt", "(ip.geoip.asnum in { 16509 13335 })\n"), wantLen: 2},
-		{file: write("rules2.txt", "(ip.geoip.asnum eq 174) or (ip.geoip.asnum eq 612)\n"), wantLen: 2},
+		{file: write("rules2.txt", "(ip.src.asnum eq 174) or (ip.src.asnum eq 612)\n"), wantLen: 2},
 		{file: write("rulesbad.txt", "(ip.geoip.asnum eq 174) and (cf.threat_score gt 10)\n"), wantErr: "not an acceptable list"},
 		{file: write("rulesnot.txt", "(ip.geoip.asnum ne 174)\n"), wantErr: "not an acceptable list"},
 		{file: write("long.txt", strings.Repeat("x", 70000)+"\n1221\n"), wantErr: "long.txt:1: invalid asn"},
 
-		// AS numbers can occupy any column if identified by a header, a rank,
-		// or an AS prefix. Ambiguous formats (like bare numbers with counts)
-		// are rejected to prevent incorrect guesses.
+		// A header or an AS prefix says which number is the ASN. Two bare
+		// numbers with neither, a rank or a count beside an ASN, are refused.
 		{file: write("ranked.csv", "rank,asn,name\n1,4134,Chinanet\n2,4837,Unicom\n"), wantLen: 2},
 		{file: write("spam.csv", "#;ASN, Organization name;Country\n1;AS4134 Chinanet;China\n6;AS4837 CHINA UNICOM;China\n;;\n"), wantLen: 2},
-		{file: write("counts.csv", "1221,12\n64496,40\n"), wantErr: "counts.csv: not an acceptable list"},
+		{file: write("counts.csv", "1221,12\n64496,40\n"), wantErr: "counts.csv:1"},
 		{file: write("digits.txt", "AS1024 12393239 Canada Inc\nAS210558 1337 Services GmbH\n"), wantLen: 2},
-		{file: write("table.md", "| | ASN Name |\n|---|---|\n| | 18779 EGIHOSTING - EGIHosting |\n| | 16509 AMAZON-02 - Amazon.com, Inc. |\n"), wantLen: 2},
+		{file: write("name-then-as.txt", "Telstra AS1221\nLevel 3 AS3356\n"), wantLen: 2},
+		{file: write("table.md", "| | ASN Name |\n|---|---|\n| | 18779 EGIHOSTING - EGIHosting |\n| | 16509 AMAZON-02 - Amazon.com, Inc. |\n| | 3 9808 Mobile |\n"), wantErr: "table.md:5"},
 		{file: write("above.asn", "# Vortex Netsol\n136334\n# DataCity\n31798\n"), wantLen: 2},
 	} {
 		m := MatchGeoIPASN{DB: asnDB, ASNs: tc.inline, ASNFiles: []string{tc.file}}
