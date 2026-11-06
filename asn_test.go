@@ -228,7 +228,7 @@ func TestASNFile(t *testing.T) {
 		{file: huge, wantErr: "too large"},
 		{file: write("empty.txt", "# nothing here\n"), wantErr: "not an acceptable list"},
 		{file: write("meta.json", `{"type":"metadata"}`+"\n"), wantErr: "not an acceptable list"},
-		{file: write("list.csv", "ASN,Entity\n1442,\"Surehosting Internet Solutions, Inc.\"\n3223;Voxility\n"), wantLen: 2},
+		{file: write("list.csv", "ASN,Entity\n1442,\"Surehosting Internet Solutions, Inc.\"\n3223;Voxility\n"), wantErr: "list.csv:3"},
 		{file: write("word.txt", "1221\nASN64496\n"), wantErr: "word.txt:2"},
 		{file: write("gap.txt", "AS 1221\n"), wantErr: "gap.txt:1"},
 		{file: write("frac.txt", "1221.5\n"), wantErr: "frac.txt:1"},
@@ -248,7 +248,7 @@ func TestASNFile(t *testing.T) {
 		{file: write("column.txt", "ASN\n1221\n"), wantLen: 1},
 		{file: write("tomsk.txt", "AS5567 AS5567 (Tomsk Polytechnic)\n"), wantLen: 1},
 		{file: write("twice.txt", "AS42772 AS42772\nAS1 Foo\n"), wantLen: 2},
-		{file: write("ranked.txt", "1 AS4134 Chinanet\n2 AS4837 Unicom\n3 9808 Mobile\n"), wantLen: 3},
+		{file: write("ranked.txt", "1 AS4134 Chinanet\n2 AS4837 Unicom\n3 9808 Mobile\n"), wantErr: "ranked.txt:3"},
 		{file: write("bare-ranks.csv", "1,4134,Chinanet\n2,4837,Unicom\n"), wantErr: "not an acceptable list"},
 		{file: write("urls.csv", "https://bgp.he.net/AS1221,AS1221,Telstra\nhttps://bgp.he.net/AS64496,AS64496,Example\n"), wantLen: 2},
 
