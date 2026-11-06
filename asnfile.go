@@ -3,6 +3,7 @@
 package caddygeoip
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/caddyserver/caddy/v2"
 )
@@ -20,7 +22,6 @@ import (
 const maxListBytes = 16 << 20
 
 var (
-	jsonASN  = regexp.MustCompile(`(?i)"asn"\s*:\s*"?([^",\s}\]]*)`)
 	comment  = regexp.MustCompile(`^;.*|#.*|(^|[^:])//.*`)
 	colNames = []string{"asn", "as", "as_number", "as-number", "asnumber"}
 	cfWords  = []string{"ip.geoip.asnum", "ip.src.asnum", "in", "eq", "or", "and"} // ne and not would invert the list
@@ -63,9 +64,10 @@ func readASNFile(logger *slog.Logger, path string, set map[string]struct{}) erro
 	return nil
 }
 
-// parseASNList takes the AS numbers a list marks by a JSON "asn" key, an
-// ip.geoip.asnum rule, a header, an AS prefix after a rank, or position.
-// Anything ambiguous, such as two bare numbers leading most rows, refuses.
+// parseASNList takes the AS numbers a list names explicitly: a JSON record's
+// asn member, a Cloudflare expression's numbers, the column a header names,
+// or a token marked AS. Failing those, a line may hold one number, or a
+// one-line file many. Anything else refuses, by line.
 func parseASNList(path, text string) ([]uint32, error) {
 	p := &parser{path: path}
 	parse := p.parseText
@@ -106,16 +108,44 @@ func (p *parser) add(line int, toks ...string) error {
 	return nil
 }
 
-// parseJSON reads one document, or one per line, by pattern rather than by
-// decoding: the one key wanted sits in an object, an array, or a line alike.
+// parseJSON decodes the values in text, one document or one per line. An
+// object with an asn member is a record and yields it. One without, and
+// an array, is a container, and what it holds is read the same way.
 func (p *parser) parseJSON(text string) error {
-	whole := json.Valid([]byte(text))
-	for i, l := range strings.Split(text, "\n") {
-		if l = strings.TrimSpace(l); !whole && l != "" && !json.Valid([]byte(l)) {
-			return p.fail(i+1, l)
+	dec := json.NewDecoder(strings.NewReader(text))
+	dec.UseNumber()
+	for line := 1; ; {
+		var v any
+		if err := dec.Decode(&v); err == io.EOF {
+			return nil
+		} else if err != nil {
+			return fmt.Errorf("asn_file: %s:%d: %w", p.path, line, err)
 		}
-		for _, m := range jsonASN.FindAllStringSubmatch(l, -1) {
-			if err := p.add(i+1, m[1]); err != nil {
+		if err := p.record(line, v); err != nil {
+			return err
+		}
+		rest := strings.TrimLeft(text[dec.InputOffset():], " \t\r\n")
+		line = 1 + strings.Count(text, "\n") - strings.Count(rest, "\n")
+	}
+}
+
+// record adds the asn member of v, or of each record inside v.
+func (p *parser) record(line int, v any) error {
+	switch v := v.(type) {
+	case map[string]any:
+		for k, m := range v {
+			if strings.EqualFold(k, "asn") {
+				return p.add(line, fmt.Sprint(m))
+			}
+		}
+		for _, m := range v {
+			if err := p.record(line, m); err != nil {
+				return err
+			}
+		}
+	case []any:
+		for _, m := range v {
+			if err := p.record(line, m); err != nil {
 				return err
 			}
 		}
@@ -123,81 +153,109 @@ func (p *parser) parseJSON(text string) error {
 	return nil
 }
 
-// parseText tokenizes every line, decides once which column holds the
-// number, then reads each row by that decision or refuses it as ambiguous.
+// parseText reads a Cloudflare expression, a headed table, or lines.
 func (p *parser) parseText(text string) error {
 	lines := strings.Split(text, "\n")
-	rows, at := tokenize(lines, isSep)
-	col, ncols, headed, second, pairs := 0, 0, false, 0, 0
-	if len(rows) > 0 && named(rows[0]) >= 0 && !slices.ContainsFunc(rows[0], isASN) {
-		// A delimited header's cells may hold spaces, so split on its delimiter alone.
-		if i := strings.IndexAny(lines[at[0]-1], ",;\t|"); i >= 0 {
-			delim := rune(lines[at[0]-1][i])
-			rows, at = tokenize(lines, func(r rune) bool { return r == delim })
-		}
-		if col, ncols, headed, rows, at = named(rows[0]), len(rows[0]), true, rows[1:], at[1:]; col < 0 {
-			return p.refuse() // the name is behind a second delimiter
+	var rows []int // the lines that hold something once comments are cut
+	for i, l := range lines {
+		if lines[i] = comment.ReplaceAllString(strings.TrimSpace(l), "$1"); hasContent(lines[i]) {
+			rows = append(rows, i)
 		}
 	}
-	rule := slices.ContainsFunc(rows, func(r []string) bool { return slices.ContainsFunc(r, isCFField) })
-	for _, r := range rows {
-		switch {
-		case len(r) > 1 && !isMarked(r[0]) && isMarked(r[1]):
-			second++ // an AS prefix after a rank
-		case len(r) > 1 && isBare(r[0]) && isBare(r[1]):
-			pairs++ // two bare numbers: a rank or a count, which is which?
-		}
-	}
-	if !headed && second > len(rows)/2 {
-		col = 1
-	} else if !headed && pairs > len(rows)/2 && len(rows) > 1 {
+	if len(rows) == 0 {
 		return p.refuse()
 	}
-	for k, r := range rows {
-		allNums := !slices.ContainsFunc(r, func(t string) bool { return !isASN(t) })
-		switch {
-		case rule: // a Cloudflare rule, on one line or several: keywords and AS numbers only
-			if slices.ContainsFunc(r, func(t string) bool { return !isCFWord(t) }) {
-				return p.refuse()
+	if slices.ContainsFunc(rows, func(i int) bool { return strings.Contains(strings.ToLower(lines[i]), ".asnum") }) {
+		for _, i := range rows { // keywords and numbers only; ne and not would invert the list
+			for _, t := range tokens(lines[i]) {
+				if isASN(t) {
+					_ = p.add(i+1, t)
+				} else if !slices.Contains(cfWords, strings.ToLower(t)) {
+					return p.refuse()
+				}
 			}
-			r = slices.DeleteFunc(r, func(t string) bool { return !isASN(t) })
-		case !headed && allNums && len(rows) == 1: // a line of numbers on its own is a list
-		case !headed && allNums: // columns of numbers, unless one number repeated
-			if slices.ContainsFunc(r, func(t string) bool { return t != r[0] }) {
-				return p.refuse()
-			}
-			r = r[:1]
-		default:
-			// A cell may read "18779 EGIHosting". A bare number beside another
-			// is a rank or a count, unless a header settled it and no cell before it split.
-			t, rest, _ := strings.Cut(cell(r, col), " ")
-			n, _ := parseASN(t)
-			rival := func(o string) bool { m, ok := parseASN(o); return ok && m != n }
-			if isBare(t) && (slices.ContainsFunc(strings.Fields(rest), rival) || (!headed || col > 0 && len(r) > ncols) && slices.ContainsFunc(r, rival)) {
-				return p.fail(at[k], strings.Join(r, " "))
-			}
-			r = []string{t}
 		}
-		if err := p.add(at[k], r...); err != nil {
+		return nil
+	}
+	if head := tokens(lines[rows[0]]); named(head) >= 0 && !slices.ContainsFunc(head, isASN) {
+		delim := ' '
+		if i := strings.IndexAny(lines[rows[0]], ",;\t|"); i >= 0 {
+			delim = rune(lines[rows[0]][i])
+		}
+		return p.parseCSV(text, delim)
+	}
+	for _, i := range rows {
+		asns, ok := pick(tokens(lines[i]), len(rows) == 1)
+		if !ok {
+			return p.fail(i+1, lines[i])
+		}
+		if err := p.add(i+1, asns...); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// tokenize is the rows of lines split at sep, with their line numbers.
-func tokenize(lines []string, sep func(rune) bool) (rows [][]string, at []int) {
-	for i, l := range lines {
-		toks := strings.FieldsFunc(comment.ReplaceAllString(strings.TrimSpace(l), "$1"), sep)
-		for k, t := range toks {
-			toks[k] = strings.Trim(t, "\"'(){}[] \t")
-		}
-		toks = slices.DeleteFunc(toks, func(t string) bool { return t == "" })
-		if slices.ContainsFunc(toks, func(t string) bool { return strings.Trim(t, "-:") != "" }) { // not a Markdown divider
-			rows, at = append(rows, toks), append(at, i+1)
+// parseCSV reads the cell a header names from each row. CSV quoting lets a
+// cell hold the delimiter; a row that holds nothing is a Markdown divider.
+func (p *parser) parseCSV(text string, delim rune) error {
+	r := csv.NewReader(strings.NewReader(text))
+	r.Comma, r.Comment, r.LazyQuotes, r.FieldsPerRecord, r.ReuseRecord, r.TrimLeadingSpace = delim, '#', true, -1, true, true
+	for col := -1; ; {
+		rec, err := r.Read()
+		line, _ := r.FieldPos(0)
+		switch {
+		case err == io.EOF:
+			return nil
+		case err != nil:
+			return fmt.Errorf("asn_file: %s:%d: %w", p.path, line, err)
+		case col < 0:
+			if col = named(rec); delim == ' ' && col >= 0 {
+				r.FieldsPerRecord = len(rec) // unquoted spaces split a cell, so every row needs the header's count
+			}
+		case slices.ContainsFunc(rec, hasContent):
+			cell := ""
+			if col < len(rec) {
+				cell = comment.ReplaceAllString(rec[col], "$1")
+			}
+			asns, ok := pick(tokens(cell), false)
+			if !ok {
+				return p.fail(line, strings.Join(rec, string(delim)))
+			}
+			if err := p.add(line, asns...); err != nil {
+				return err
+			}
 		}
 	}
-	return rows, at
+}
+
+// pick is the ASNs among the tokens of a line or cell: all of them when a
+// one-line file holds only numbers, else the first marked AS, else the only
+// bare number. Two bare numbers are a rank or a count beside an ASN, and
+// nothing says which.
+func pick(toks []string, oneLine bool) ([]string, bool) {
+	if oneLine && len(toks) > 0 && !slices.ContainsFunc(toks, func(t string) bool { return !isASN(t) }) {
+		return toks, true
+	}
+	if i := slices.IndexFunc(toks, isMarked); i >= 0 {
+		return toks[i : i+1], true
+	}
+	bare, n := -1, 0
+	for i, t := range toks {
+		if isASN(t) {
+			bare, n = i, n+1
+		}
+	}
+	return toks[max(bare, 0) : bare+1], n == 1
+}
+
+// tokens splits a line at every separator, pipes included for Markdown.
+func tokens(l string) []string {
+	toks := strings.FieldsFunc(l, func(r rune) bool { return strings.ContainsRune(" \t,;|", r) })
+	for k, t := range toks {
+		toks[k] = strings.Trim(t, `"'(){}[]`)
+	}
+	return slices.DeleteFunc(toks, func(t string) bool { return t == "" })
 }
 
 // named is the index of the column whose words name the ASN, or -1.
@@ -207,16 +265,14 @@ func named(h []string) int {
 	})
 }
 
-// cell is r[j], or "" when r has no such column.
-func cell(r []string, j int) string { return strings.Join(r[min(j, len(r)):min(j+1, len(r))], "") }
+// hasContent reports whether s holds a letter or digit: a divider does not.
+func hasContent(s string) bool {
+	return strings.ContainsFunc(s, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) })
+}
 
-func isSep(r rune) bool       { return strings.ContainsRune(" \t,;|", r) } // | for Markdown tables
-func isASN(t string) bool     { _, ok := parseASN(t); return ok }
-func isBare(t string) bool    { return !hasAS(t) && isASN(t) }
-func isMarked(t string) bool  { return hasAS(t) && isASN(t) }
-func isCFField(t string) bool { return strings.HasSuffix(strings.ToLower(t), ".asnum") }
-func isCFWord(t string) bool  { return isASN(t) || slices.Contains(cfWords, strings.ToLower(t)) }
-func hasAS(s string) bool     { return len(s) > 2 && strings.EqualFold(s[:2], "AS") }
+func isASN(t string) bool    { _, ok := parseASN(t); return ok }
+func isMarked(t string) bool { return hasAS(t) && isASN(t) }
+func hasAS(s string) bool    { return len(s) > 2 && strings.EqualFold(s[:2], "AS") }
 
 // parseASN parses an asplain AS number (RFC 5396), 1 to 4294967295, AS prefix or not.
 func parseASN(s string) (uint64, bool) {
