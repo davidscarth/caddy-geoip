@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/netip"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/oschwald/maxminddb-golang/v2"
@@ -89,7 +88,7 @@ func (m *MatchGeoIPASN) Provision(ctx caddy.Context) error {
 	// traits, ASN and ISP databases carry them at the top level. The
 	// path is chosen once here rather than per request.
 	m.asnPath = []any{"autonomous_system_number"}
-	if strings.Contains(strings.ToLower(m.db.Metadata.DatabaseType), "enterprise") {
+	if hasType(m.db.Metadata.DatabaseType, []string{"enterprise"}) {
 		m.asnPath = []any{"traits", "autonomous_system_number"}
 	}
 	return nil
