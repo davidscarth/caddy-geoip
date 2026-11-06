@@ -240,8 +240,8 @@ func TestASNFile(t *testing.T) {
 		{file: write("bom.txt", "\ufeff1221\n64496\n"), wantLen: 2},
 		{file: write("utf16.txt", "\xff\xfe1\x002\x002\x001\x00\r\x00\n\x00"), wantErr: "UTF-16"},
 
-		// Comment lines, and headers: one with a digit in a later column,
-		// and a single-column one, which must name the column.
+		// Tests parsing of comment lines, inline notes, and headers
+		// (requiring column names for single-column files).
 		{file: write("comments.txt", "; list\n// note\n1221 // Telstra\n64496 ; Example\n"), wantLen: 2},
 		{file: write("glued.txt", "1221//Telstra\n64496#Example\n"), wantLen: 2},
 		{file: write("count.csv", "asn,ipv4_count\n1221,12\n64496,40\n"), wantLen: 2},
@@ -290,10 +290,9 @@ func TestASNFile(t *testing.T) {
 		{file: write("rulesnot.txt", "(ip.geoip.asnum ne 174)\n"), wantErr: "not an acceptable list"},
 		{file: write("long.txt", strings.Repeat("x", 70000)+"\n1221\n"), wantErr: "long.txt:1: invalid asn"},
 
-		// The AS number need not be the first column: a header names it,
-		// even one commented out, and a rank before an AS-prefixed number
-		// gives it away. A count after a bare number does not, so that
-		// file is refused rather than guessed at.
+		// AS numbers can occupy any column if identified by a header, a rank,
+		// or an AS prefix. Ambiguous formats (like bare numbers with counts)
+		// are rejected to prevent incorrect guesses.
 		{file: write("ranked.csv", "rank,asn,name\n1,4134,Chinanet\n2,4837,Unicom\n"), wantLen: 2},
 		{file: write("spam.csv", "#;ASN, Organization name;Country\n1;AS4134 Chinanet;China\n6;AS4837 CHINA UNICOM;China\n;;\n"), wantLen: 2},
 		{file: write("counts.csv", "1221,12\n64496,40\n"), wantErr: "counts.csv: not an acceptable list"},
