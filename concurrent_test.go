@@ -17,7 +17,7 @@ func TestMatchConcurrent(t *testing.T) {
 	asn := &MatchGeoIPASN{DB: asnDB, ASNs: []uint32{1221}}
 	subdivision := &MatchGeoIPSubdivision{DB: cityDB, Country: "US", Subdivisions: []string{"WA"}}
 	anonymous := &MatchGeoIPAnonymous{DB: anonDB, Types: []string{"tor"}}
-	for _, p := range []interface{ Provision(caddy.Context) error }{country, asn, subdivision, anonymous} {
+	for _, p := range []caddy.Provisioner{country, asn, subdivision, anonymous} {
 		if err := p.Provision(caddy.Context{}); err != nil {
 			t.Fatal(err)
 		}

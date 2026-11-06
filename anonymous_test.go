@@ -216,26 +216,26 @@ func TestAnonymousMatch(t *testing.T) {
 		addr  string
 		want  bool
 	}{
-		{"vpn matches vpn", anonDB, []string{"vpn"}, "1.2.0.1:1234", true},
-		{"tor does not match vpn-only", anonDB, []string{"tor"}, "1.2.0.1:1234", false},
-		{"tor matches vpn+tor", anonDB, []string{"tor"}, "1.124.213.1:1234", true},
-		{"one of several", anonDB, []string{"hosting", "tor"}, "1.124.213.1:1234", true},
-		{"anonymous is the umbrella", anonDB, []string{"anonymous"}, "186.30.236.1:1234", true},
-		{"public proxy", anonDB, []string{"public_proxy"}, "186.30.236.1:1234", true},
-		{"all six", anonDB, []string{"residential_proxy"}, "81.2.69.0:1234", true},
-		{"lower case config", anonDB, []string{"TOR"}, "1.124.213.1:1234", true},
+		{name: "vpn matches vpn", db: anonDB, types: []string{"vpn"}, addr: "1.2.0.1:1234", want: true},
+		{name: "tor does not match vpn-only", db: anonDB, types: []string{"tor"}, addr: "1.2.0.1:1234", want: false},
+		{name: "tor matches vpn+tor", db: anonDB, types: []string{"tor"}, addr: "1.124.213.1:1234", want: true},
+		{name: "one of several", db: anonDB, types: []string{"hosting", "tor"}, addr: "1.124.213.1:1234", want: true},
+		{name: "anonymous is the umbrella", db: anonDB, types: []string{"anonymous"}, addr: "186.30.236.1:1234", want: true},
+		{name: "public proxy", db: anonDB, types: []string{"public_proxy"}, addr: "186.30.236.1:1234", want: true},
+		{name: "all six", db: anonDB, types: []string{"residential_proxy"}, addr: "81.2.69.0:1234", want: true},
+		{name: "lower case config", db: anonDB, types: []string{"TOR"}, addr: "1.124.213.1:1234", want: true},
 		// A clean address has an empty record in Anonymous IP and no
 		// record at all in IP Risk; both mean not anonymous.
-		{"clean, empty record", anonDB, []string{"anonymous"}, "8.8.8.8:1234", false},
-		{"clean, no record", ipRiskDB, []string{"anonymous"}, "8.8.8.8:1234", false},
-		{"private, no record", anonDB, []string{"anonymous"}, "10.1.2.3:1234", false},
+		{name: "clean, empty record", db: anonDB, types: []string{"anonymous"}, addr: "8.8.8.8:1234", want: false},
+		{name: "clean, no record", db: ipRiskDB, types: []string{"anonymous"}, addr: "8.8.8.8:1234", want: false},
+		{name: "private, no record", db: anonDB, types: []string{"anonymous"}, addr: "10.1.2.3:1234", want: false},
 		// Extra fields on the newer editions are ignored.
-		{"anonymous plus", anonPlusDB, []string{"vpn"}, "1.2.0.1:1234", true},
-		{"ip risk with flags", ipRiskDB, []string{"vpn"}, "6.1.2.1:1234", true},
+		{name: "anonymous plus", db: anonPlusDB, types: []string{"vpn"}, addr: "1.2.0.1:1234", want: true},
+		{name: "ip risk with flags", db: ipRiskDB, types: []string{"vpn"}, addr: "6.1.2.1:1234", want: true},
 		// A score with no flags is not a match for any kind.
-		{"ip risk score only", ipRiskDB, []string{"anonymous"}, "55.0.0.1:1234", false},
+		{name: "ip risk score only", db: ipRiskDB, types: []string{"anonymous"}, addr: "55.0.0.1:1234", want: false},
 
-		{"unparseable address", anonDB, []string{"anonymous"}, "not-an-address", false},
+		{name: "unparseable address", db: anonDB, types: []string{"anonymous"}, addr: "not-an-address", want: false},
 	} {
 		m := MatchGeoIPAnonymous{DB: tc.db, Types: tc.types}
 		if err := m.Provision(caddy.Context{}); err != nil {
@@ -262,16 +262,16 @@ func TestAnonymousCutoffs(t *testing.T) {
 		addr string
 		want bool
 	}{
-		{"proxy without confidence stands", MatchGeoIPAnonymous{DB: anonPlusDB, Types: []string{"public_proxy"}, MinConfidence: 90}, "6.1.0.3:1234", true},
-		{"vpn below the cutoff is still a vpn", MatchGeoIPAnonymous{DB: anonPlusDB, Types: []string{"vpn", "public_proxy"}, MinConfidence: 90}, "1.2.0.1:1234", true},
-		{"risk alone, flagless record at 99", MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 80}, "55.0.0.4:1234", true},
-		{"risk alone, flagless record at 85", MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 80}, "214.2.3.6:1234", true},
-		{"risk alone, below at 65", MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 80}, "55.0.0.1:1234", false},
-		{"risk at the cutoff", MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 65}, "55.0.0.1:1234", true},
-		{"type or risk: vpn at 75 matches on vpn", MatchGeoIPAnonymous{DB: ipRiskDB, Types: []string{"vpn"}, MinRisk: 80}, "6.1.2.1:1234", true},
-		{"type or risk: hosting at 60 matches neither", MatchGeoIPAnonymous{DB: ipRiskDB, Types: []string{"vpn"}, MinRisk: 80}, "7.1.2.2:1234", false},
-		{"type or risk: flagless at 99 matches on risk", MatchGeoIPAnonymous{DB: ipRiskDB, Types: []string{"vpn"}, MinRisk: 80}, "55.0.0.4:1234", true},
-		{"risk, no record", MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 1}, "8.8.8.8:1234", false},
+		{name: "proxy without confidence stands", m: MatchGeoIPAnonymous{DB: anonPlusDB, Types: []string{"public_proxy"}, MinConfidence: 90}, addr: "6.1.0.3:1234", want: true},
+		{name: "vpn below the cutoff is still a vpn", m: MatchGeoIPAnonymous{DB: anonPlusDB, Types: []string{"vpn", "public_proxy"}, MinConfidence: 90}, addr: "1.2.0.1:1234", want: true},
+		{name: "risk alone, flagless record at 99", m: MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 80}, addr: "55.0.0.4:1234", want: true},
+		{name: "risk alone, flagless record at 85", m: MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 80}, addr: "214.2.3.6:1234", want: true},
+		{name: "risk alone, below at 65", m: MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 80}, addr: "55.0.0.1:1234", want: false},
+		{name: "risk at the cutoff", m: MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 65}, addr: "55.0.0.1:1234", want: true},
+		{name: "type or risk: vpn at 75 matches on vpn", m: MatchGeoIPAnonymous{DB: ipRiskDB, Types: []string{"vpn"}, MinRisk: 80}, addr: "6.1.2.1:1234", want: true},
+		{name: "type or risk: hosting at 60 matches neither", m: MatchGeoIPAnonymous{DB: ipRiskDB, Types: []string{"vpn"}, MinRisk: 80}, addr: "7.1.2.2:1234", want: false},
+		{name: "type or risk: flagless at 99 matches on risk", m: MatchGeoIPAnonymous{DB: ipRiskDB, Types: []string{"vpn"}, MinRisk: 80}, addr: "55.0.0.4:1234", want: true},
+		{name: "risk, no record", m: MatchGeoIPAnonymous{DB: ipRiskDB, MinRisk: 1}, addr: "8.8.8.8:1234", want: false},
 	} {
 		if err := tc.m.Provision(caddy.Context{}); err != nil {
 			t.Fatalf("%s: provision: %v", tc.name, err)
@@ -291,10 +291,10 @@ func TestConfidencePlaceholder(t *testing.T) {
 		t.Fatalf("provision: %v", err)
 	}
 	for _, tc := range []struct{ addr, want string }{
-		{"1.2.0.1:1234", "30"},
-		{"1.2.0.2:1234", "99"},
-		{"1.2.0.0:1234", ""},
-		{"8.8.8.8:1234", ""},
+		{addr: "1.2.0.1:1234", want: "30"},
+		{addr: "1.2.0.2:1234", want: "99"},
+		{addr: "1.2.0.0:1234", want: ""},
+		{addr: "8.8.8.8:1234", want: ""},
 	} {
 		r := newRequest(tc.addr)
 		if _, err := m.MatchWithError(r); err != nil {
@@ -310,9 +310,9 @@ func TestConfidencePlaceholder(t *testing.T) {
 		t.Fatalf("provision: %v", err)
 	}
 	for _, tc := range []struct{ addr, want string }{
-		{"6.1.2.1:1234", "75"},
-		{"55.0.0.4:1234", "99"},
-		{"11.1.2.3:1234", ""},
+		{addr: "6.1.2.1:1234", want: "75"},
+		{addr: "55.0.0.4:1234", want: "99"},
+		{addr: "11.1.2.3:1234", want: ""},
 	} {
 		r := newRequest(tc.addr)
 		if _, err := m.MatchWithError(r); err != nil {
@@ -331,12 +331,12 @@ func TestAnonymousPlaceholder(t *testing.T) {
 		t.Fatalf("provision: %v", err)
 	}
 	for _, tc := range []struct{ addr, want string }{
-		{"1.124.213.1:1234", "anonymous,vpn,tor"},
-		{"81.2.69.0:1234", "anonymous,vpn,tor,hosting,public_proxy,residential_proxy"},
-		{"186.30.236.1:1234", "anonymous,public_proxy"},
+		{addr: "1.124.213.1:1234", want: "anonymous,vpn,tor"},
+		{addr: "81.2.69.0:1234", want: "anonymous,vpn,tor,hosting,public_proxy,residential_proxy"},
+		{addr: "186.30.236.1:1234", want: "anonymous,public_proxy"},
 		// Set, to empty, whether the record is empty or absent.
-		{"8.8.8.8:1234", ""},
-		{"10.1.2.3:1234", ""},
+		{addr: "8.8.8.8:1234", want: ""},
+		{addr: "10.1.2.3:1234", want: ""},
 	} {
 		r := newRequest(tc.addr)
 		if _, err := m.MatchWithError(r); err != nil {
@@ -383,14 +383,14 @@ func TestAnonFlagsMaskConfidence(t *testing.T) {
 		cutoff uint8
 		want   uint8
 	}{
-		{"below cutoff drops both proxies, keeps the umbrella", withConf(both, 54), 60, 1},
-		{"at cutoff keeps both", withConf(both, 54), 54, 1 | 16 | 32},
-		{"no confidence is not judged, flags stand", both, 99, 1 | 16 | 32},
-		{"a confidence of 0 is a confidence, and below any cutoff", withConf(both, 0), 1, 1},
-		{"no cutoff", withConf(both, 1), 0, 1 | 16 | 32},
-		{"only the set proxy is affected", withConf(anonFlags{Anonymous: true, PublicProxy: true}, 12), 30, 1},
-		{"vpn and tor are never in doubt", withConf(anonFlags{Anonymous: true, VPN: true, Tor: true, PublicProxy: true}, 12), 30, 1 | 2 | 4},
-		{"hosting is never in doubt", withConf(anonFlags{Anonymous: true, Hosting: true}, 12), 30, 1 | 8},
+		{name: "below cutoff drops both proxies, keeps the umbrella", f: withConf(both, 54), cutoff: 60, want: 1},
+		{name: "at cutoff keeps both", f: withConf(both, 54), cutoff: 54, want: 1 | 16 | 32},
+		{name: "no confidence is not judged, flags stand", f: both, cutoff: 99, want: 1 | 16 | 32},
+		{name: "a confidence of 0 is a confidence, and below any cutoff", f: withConf(both, 0), cutoff: 1, want: 1},
+		{name: "no cutoff", f: withConf(both, 1), cutoff: 0, want: 1 | 16 | 32},
+		{name: "only the set proxy is affected", f: withConf(anonFlags{Anonymous: true, PublicProxy: true}, 12), cutoff: 30, want: 1},
+		{name: "vpn and tor are never in doubt", f: withConf(anonFlags{Anonymous: true, VPN: true, Tor: true, PublicProxy: true}, 12), cutoff: 30, want: 1 | 2 | 4},
+		{name: "hosting is never in doubt", f: withConf(anonFlags{Anonymous: true, Hosting: true}, 12), cutoff: 30, want: 1 | 8},
 	} {
 		if got := tc.f.mask(tc.cutoff); got != tc.want {
 			t.Errorf("%s: mask %d, want %d", tc.name, got, tc.want)

@@ -126,7 +126,7 @@ func (MatchGeoIPAnonymous) CaddyModule() caddy.ModuleInfo {
 // or no type and no risk, is left for Validate to report, so the
 // database isn't opened for a config that is about to be refused.
 func (m *MatchGeoIPAnonymous) Provision(ctx caddy.Context) error {
-	if m.DB == "" || len(m.Types) == 0 && m.MinRisk == 0 {
+	if m.DB == "" || (len(m.Types) == 0 && m.MinRisk == 0) {
 		return nil
 	}
 	for _, t := range m.Types {
@@ -202,7 +202,8 @@ func (m *MatchGeoIPAnonymous) MatchWithError(r *http.Request) (bool, error) {
 	}
 	setPlaceholder(r, "geoip.confidence", confidence)
 	setPlaceholder(r, "geoip.risk", risk)
-	return mask&m.types != 0 || m.MinRisk != 0 && f.Risk != nil && *f.Risk >= float64(m.MinRisk), nil
+	risky := m.MinRisk != 0 && f.Risk != nil && *f.Risk >= float64(m.MinRisk)
+	return mask&m.types != 0 || risky, nil
 }
 
 // UnmarshalCaddyfile sets up the matcher from Caddyfile tokens. Syntax:
@@ -240,7 +241,7 @@ func (m *MatchGeoIPAnonymous) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				}
 				m.Types = append(m.Types, args...)
 			case "confidence", "risk":
-				name, cutoff := d.Val(), &m.MinConfidence
+				name, cutoff := d.Val(), &m.MinConfidence // the name, before AllArgs moves on
 				if name == "risk" {
 					cutoff = &m.MinRisk
 				}
