@@ -33,9 +33,9 @@ type MatchGeoIPASN struct {
 	// Autonomous system numbers to match.
 	ASNs []uint32 `json:"asns,omitempty"`
 
-	// Paths to files of autonomous system numbers to match, one per
-	// line with or without an AS prefix, optionally followed by a name
-	// or CSV columns, or Spamhaus ASN-DROP in its JSON lines form. Each
+	// Paths to files of autonomous system numbers to match. Parser will
+	// validate any list, from plain numbers to CSV, Markdown, Cloudflare
+	// rules, or JSON (e.g. Spamhaus ASN-DROP) with an "asn" key. Each
 	// file is read on its own and must hold at least one ASN. Combined
 	// with ASNs in the same Caddyfile block.
 	ASNFiles []string `json:"asn_files,omitempty"`
