@@ -234,6 +234,7 @@ func TestASNFile(t *testing.T) {
 		{file: plain, inline: []uint32{64497}, wantLen: 3},
 		{file: write("dup.txt", "1221\n1221\n"), inline: []uint32{1221}, wantLen: 1},
 		{file: write("bom-comments.txt", "\ufeff; list\n// note\n1221 https://example.com // Telstra\n64496#Example\n"), wantLen: 2},
+		{file: write("hash-comment.txt", "#, as of today\n#,ASN AS1221 was delisted\n64496\n"), wantLen: 1},
 		{file: write("trailing-as.txt", "Telstra AS1221\nLevel 3 AS3356\nAS 64496\n"), wantLen: 3},
 		{file: write("ranked.csv", "; ASN list\nrank,asn,name # rank, then the ASN\n\t# mid-table comment\n1,4134,\"Foo # bar\"\n2,4837,Unicom\n"), wantLen: 2},
 		{file: write("aligned.md", "| ASN | Name |\n|:---:|---:|\n| 18779 | EGIHosting |\n"), wantLen: 1},
@@ -250,6 +251,7 @@ func TestASNFile(t *testing.T) {
 		{file: write("negative.txt", "-1234\n5678\n"), wantErr: "negative.txt:1: invalid asn"},
 		{file: write("ips.txt", "1.2.3.0/24\n"), wantErr: "ips.txt:1: invalid asn"},
 		{file: write("cf-not.txt", "(ip.geoip.asnum ne 174)\n"), wantErr: "not an acceptable list"},
+		{file: write("cf-upper-not.txt", "(IP.GEOIP.ASNUM ne AS1221)\n"), wantErr: "not an acceptable list"},
 		{file: write("cf-other.txt", "(ip.geoip.asnum eq 174) and (cf.threat_score gt 10)\n"), wantErr: "not an acceptable list"},
 		{file: write("footer.txt", "1221\nTotal: 934\n"), wantErr: "footer.txt:2"},
 		{file: write("peer-note.txt", "51167 CONTABO to AS1299\n"), wantErr: "peer-note.txt:1"},
@@ -379,11 +381,11 @@ func TestLogListAge(t *testing.T) {
 		modified time.Time
 		want     string
 	}{
-		{"3 days", now.AddDate(0, 0, -3), `{"level":"INFO","msg":"asn list loaded","path":"/etc/caddy/drop.json","asns":443,"modified":"2026-10-29T12:00:00Z","age_days":3}`},
-		{"45 days", now.AddDate(0, 0, -45), `{"level":"WARN","msg":"asn list is more than 30 days old","path":"/etc/caddy/drop.json","asns":443,"modified":"2026-09-17T12:00:00Z","age_days":45}`},
-		{"future", now.Add(time.Hour), `{"level":"WARN","msg":"asn list modified time is in the future","path":"/etc/caddy/drop.json","asns":443,"modified":"2026-11-01T13:00:00Z"}`},
+		{"3 days", now.AddDate(0, 0, -3), `{"level":"INFO","msg":"asn list loaded","path":"/etc/caddy/drop.json","asns":443,"added":440,"modified":"2026-10-29T12:00:00Z","age_days":3}`},
+		{"45 days", now.AddDate(0, 0, -45), `{"level":"WARN","msg":"asn list is more than 30 days old","path":"/etc/caddy/drop.json","asns":443,"added":440,"modified":"2026-09-17T12:00:00Z","age_days":45}`},
+		{"future", now.Add(time.Hour), `{"level":"WARN","msg":"asn list modified time is in the future","path":"/etc/caddy/drop.json","asns":443,"added":440,"modified":"2026-11-01T13:00:00Z"}`},
 	} {
-		got := logLines(t, func(l *slog.Logger) { logListAge(l, "/etc/caddy/drop.json", 443, tc.modified, now) })
+		got := logLines(t, func(l *slog.Logger) { logListAge(l, "/etc/caddy/drop.json", 443, 440, tc.modified, now) })
 		if len(got) != 1 || got[0] != tc.want {
 			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
 		}

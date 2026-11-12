@@ -65,7 +65,7 @@ func readASNFile(logger *slog.Logger, path string, set map[string]struct{}) erro
 	for _, asn := range asns {
 		set[strconv.FormatUint(uint64(asn), 10)] = struct{}{}
 	}
-	logListAge(logger, path, len(set)-before, info.ModTime(), time.Now())
+	logListAge(logger, path, len(asns), len(set)-before, info.ModTime(), time.Now())
 	return nil
 }
 

@@ -95,11 +95,12 @@ func (m *MatchGeoIPASN) Provision(ctx caddy.Context) error {
 }
 
 // logListAge logs one line about an ASN list that loaded: INFO with how
-// many ASNs it added, its modified time, and its age, WARN when it was
-// modified more than maxAgeDays before now, or WARN when its modified time is
-// in the future. asns counts only ASNs not already in the set.
-func logListAge(logger *slog.Logger, path string, asns int, modified, now time.Time) {
-	attrs := []any{slog.String("path", path), slog.Int("asns", asns), slog.String("modified", modified.UTC().Format(time.RFC3339))}
+// many ASNs it holds and how many it added, its modified time, and its age,
+// WARN when it was modified more than maxAgeDays before now, or WARN when its
+// modified time is in the future. added counts only ASNs not already in the
+// set, so a list whose entries another list carried adds none.
+func logListAge(logger *slog.Logger, path string, asns, added int, modified, now time.Time) {
+	attrs := []any{slog.String("path", path), slog.Int("asns", asns), slog.Int("added", added), slog.String("modified", modified.UTC().Format(time.RFC3339))}
 	switch {
 	case modified.After(now):
 		logger.Warn("asn list modified time is in the future", attrs...)
