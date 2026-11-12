@@ -5,6 +5,7 @@ package caddygeoip
 import (
 	"fmt"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 
@@ -146,7 +147,7 @@ func (m *MatchGeoIPAnonymous) Provision(ctx caddy.Context) error {
 	if m.MinRisk > 0 && !hasType(m.db.Metadata.DatabaseType, []string{"ip-risk"}) {
 		return fmt.Errorf("risk needs an IP Risk database, not %s", m.db.Metadata.DatabaseType)
 	}
-	return nil
+	return probe(m.db, func(ip netip.Addr) error { var f anonFlags; return m.db.Lookup(ip).Decode(&f) })
 }
 
 // anonKind returns the index of kind in anonKinds, and whether it is one.
@@ -182,7 +183,7 @@ func (m *MatchGeoIPAnonymous) MatchWithError(r *http.Request) (bool, error) {
 	var f anonFlags
 	if ip := clientIP(r); ip.IsValid() {
 		if err := m.db.Lookup(ip).Decode(&f); err != nil {
-			return false, fmt.Errorf("geoip_anonymous: %s: %w", m.DB, err)
+			return false, fmt.Errorf("geoip_anonymous: %s: %w", caddy.NewReplacer().ReplaceAll(m.DB, ""), err)
 		}
 	}
 	mask := f.mask(m.MinConfidence)
@@ -238,6 +239,9 @@ func (m *MatchGeoIPAnonymous) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				name, cutoff := d.Val(), &m.MinConfidence // the name, before AllArgs moves on
 				if name == "risk" {
 					cutoff = &m.MinRisk
+				}
+				if *cutoff != 0 {
+					return d.Errf("%s already specified", name)
 				}
 				var s string
 				if !d.AllArgs(&s) {

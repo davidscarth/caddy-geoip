@@ -3,7 +3,6 @@
 package caddygeoip
 
 import (
-	"bufio"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -232,13 +231,15 @@ func (p *parser) parseText(text string) error {
 }
 
 // isHashHeader reports whether line is a header whose first column is named
-// #, as a rank is (#;ASN, Organization name;Country), and so not a comment.
+// #, as a rank is (#;ASN, Organization name;Country), and so not a comment:
+// the word after the delimiter names the ASN column, and no number follows.
+// A bare "as" is a word, as in "#, as of today", so it does not.
 func isHashHeader(line string) bool {
 	if len(line) < 2 || line[0] != '#' || !strings.ContainsRune(",;\t|", rune(line[1])) {
 		return false
 	}
-	header := tokenize(stripComment(line[2:]))
-	return asnColumn(header) >= 0 && !slices.ContainsFunc(header, isASN)
+	words := tokenize(stripComment(line[2:]))
+	return len(words) > 0 && !strings.EqualFold(words[0], "as") && asnColumn(words[:1]) == 0 && !slices.ContainsFunc(words, isASN)
 }
 
 // parseTable reads the cell a header names from each row under it, header
@@ -248,8 +249,7 @@ func isHashHeader(line string) bool {
 // quotes are odd in number: that may be a cell that runs on to the next line.
 func (p *parser) parseTable(raw []string, header int, delimiter rune) error {
 	var source strings.Reader
-	buffer := bufio.NewReader(&source)
-	reader := csv.NewReader(buffer)
+	reader := csv.NewReader(&source) // which buffers it, and reads on after an EOF
 	reader.Comma, reader.FieldsPerRecord, reader.TrimLeadingSpace, reader.ReuseRecord = delimiter, -1, delimiter != '\t', true
 	indent := " \t"
 	if delimiter == '\t' {
@@ -263,7 +263,6 @@ func (p *parser) parseTable(raw []string, header int, delimiter rune) error {
 			continue // a comment, which a ; is only where it does not split the cells
 		}
 		source.Reset(row)
-		buffer.Reset(&source)
 		cells, err := reader.Read()
 		if err != nil && strings.Count(row, `"`)%2 == 0 {
 			cells, err = strings.Split(row, string(delimiter)), nil
@@ -340,16 +339,25 @@ func hasContent(text string) bool {
 	return strings.ContainsFunc(text, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) })
 }
 
-func stripComment(text string) string { return commentPattern.ReplaceAllString(text, "$1") } // $1 keeps the character ahead of a //
-func isASN(token string) bool         { _, ok := parseASN(token); return ok }
-func isMarked(token string) bool      { return hasAS(token) && isASN(token) }
-func hasAS(token string) bool         { return len(token) > 2 && strings.EqualFold(token[:2], "AS") }
-func sameASN(a, b string) bool        { x, _ := parseASN(a); y, _ := parseASN(b); return x == y }
+// stripComment cuts a comment; $1 keeps the character ahead of a //.
+func stripComment(text string) string {
+	if !strings.ContainsAny(text, "#;/") {
+		return text
+	}
+	return commentPattern.ReplaceAllString(text, "$1")
+}
+func isASN(token string) bool    { _, ok := parseASN(token); return ok }
+func isMarked(token string) bool { return hasAS(token) && isASN(token) }
+func hasAS(token string) bool    { return len(token) > 2 && strings.EqualFold(token[:2], "AS") }
+func sameASN(a, b string) bool   { x, _ := parseASN(a); y, _ := parseASN(b); return x == y }
 
 // parseASN parses an asplain AS number (RFC 5396), 1 to 4294967295, AS prefix or not.
 func parseASN(token string) (uint32, bool) {
 	if hasAS(token) {
 		token = token[2:]
+	}
+	if token == "" || strings.ContainsFunc(token, func(r rune) bool { return r < '0' || r > '9' }) {
+		return 0, false // not digits, so no error for strconv to build
 	}
 	number, err := strconv.ParseUint(token, 10, 32)
 	return uint32(number), err == nil && number != 0

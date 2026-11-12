@@ -91,7 +91,7 @@ func (m *MatchGeoIPASN) Provision(ctx caddy.Context) error {
 	if hasType(m.db.Metadata.DatabaseType, []string{"enterprise"}) {
 		m.asnPath = []any{"traits", "autonomous_system_number"}
 	}
-	return nil
+	return probe(m.db, func(ip netip.Addr) error { _, err := m.asnOf(ip); return err })
 }
 
 // logListAge logs one line about an ASN list that loaded: INFO with how
@@ -145,7 +145,7 @@ func (m *MatchGeoIPASN) MatchWithError(r *http.Request) (bool, error) {
 func (m *MatchGeoIPASN) asnOf(ip netip.Addr) (string, error) {
 	var n uint32
 	if err := m.db.Lookup(ip).DecodePath(&n, m.asnPath...); err != nil {
-		return "", fmt.Errorf("geoip_asn: %s: %w", m.DB, err)
+		return "", fmt.Errorf("geoip_asn: %s: %w", caddy.NewReplacer().ReplaceAll(m.DB, ""), err)
 	}
 	if n == 0 {
 		return "", nil

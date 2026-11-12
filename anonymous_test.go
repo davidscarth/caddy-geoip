@@ -82,6 +82,23 @@ func TestAnonymousUnmarshalCaddyfile(t *testing.T) {
 		},
 		{
 			input: `geoip_anonymous {
+				db /tmp/Anon.mmdb
+				type public_proxy
+				confidence 60
+				confidence 70
+			}`,
+			wantErr: true,
+		},
+		{
+			input: `geoip_anonymous {
+				db /tmp/Risk.mmdb
+				risk 80
+				risk 90
+			}`,
+			wantErr: true,
+		},
+		{
+			input: `geoip_anonymous {
 				db /tmp/Risk.mmdb
 				risk 80
 			}`,

@@ -60,8 +60,10 @@ func (m *MatchGeoIPCountry) Provision(ctx caddy.Context) error {
 		m.countries[strings.ToUpper(c)] = struct{}{}
 	}
 	var err error
-	m.db, err = openDB(ctx.Slogger(), m.DB, "country", "city", "enterprise")
-	return err
+	if m.db, err = openDB(ctx.Slogger(), m.DB, "country", "city", "enterprise"); err != nil {
+		return err
+	}
+	return probe(m.db, func(ip netip.Addr) error { _, err := m.countryOf(ip); return err })
 }
 
 // Validate ensures the configuration is usable.
@@ -99,7 +101,7 @@ func (m *MatchGeoIPCountry) MatchWithError(r *http.Request) (bool, error) {
 func (m *MatchGeoIPCountry) countryOf(ip netip.Addr) (string, error) {
 	var code string
 	if err := m.db.Lookup(ip).DecodePath(&code, countryPath...); err != nil {
-		return "", fmt.Errorf("geoip_country: %s: %w", m.DB, err)
+		return "", fmt.Errorf("geoip_country: %s: %w", caddy.NewReplacer().ReplaceAll(m.DB, ""), err)
 	}
 	return code, nil
 }

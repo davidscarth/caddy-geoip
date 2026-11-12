@@ -86,8 +86,10 @@ func (m *MatchGeoIPSubdivision) Provision(ctx caddy.Context) error {
 	}
 
 	var err error
-	m.db, err = openDB(ctx.Slogger(), m.DB, "city", "enterprise")
-	return err
+	if m.db, err = openDB(ctx.Slogger(), m.DB, "city", "enterprise"); err != nil {
+		return err
+	}
+	return probe(m.db, func(ip netip.Addr) error { _, _, _, err := m.placeOf(ip); return err })
 }
 
 // Validate ensures the configuration is usable.
@@ -138,7 +140,7 @@ func (m *MatchGeoIPSubdivision) MatchWithError(r *http.Request) (bool, error) {
 func (m *MatchGeoIPSubdivision) placeOf(ip netip.Addr) (country, subdivision string, matched bool, err error) {
 	p := place{in: m.subdivisions}
 	if err = m.db.Lookup(ip).Decode(&p); err != nil {
-		return "", "", false, fmt.Errorf("geoip_subdivision: %s: %w", m.DB, err)
+		return "", "", false, fmt.Errorf("geoip_subdivision: %s: %w", caddy.NewReplacer().ReplaceAll(m.DB, ""), err)
 	}
 	return p.country, p.subdivision, p.matched, nil
 }

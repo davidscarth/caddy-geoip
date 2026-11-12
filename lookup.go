@@ -72,6 +72,17 @@ func openDB(logger *slog.Logger, path string, types ...string) (*maxminddb.Reade
 	return db, nil
 }
 
+// probe decodes the first record in db as decode would for a request, so a
+// file laid out unlike the edition it claims to be refuses at load, not on
+// every request. A record without the field decodes to nothing, so a sparse
+// first record proves nothing: this is best effort.
+func probe(db *maxminddb.Reader, decode func(netip.Addr) error) error {
+	for result := range db.Networks() {
+		return decode(result.Prefix().Addr())
+	}
+	return nil
+}
+
 // maxAgeDays is how old a database or list may be before loading it logs a
 // warning.
 const maxAgeDays = 30
