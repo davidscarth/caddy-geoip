@@ -3,11 +3,13 @@
 package caddygeoip
 
 import (
+	"bufio"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"regexp"
 	"slices"
@@ -23,9 +25,9 @@ import (
 const maxListBytes = 16 << 20
 
 var (
-	comment  = regexp.MustCompile(`^;.*|#.*|(^|[^:])//.*`)
-	colNames = []string{"asn", "as", "as_number", "as-number", "asnumber"}
-	cfWords  = []string{"ip.geoip.asnum", "ip.src.asnum", "in", "eq", "or", "and"} // ne and not would invert the list
+	commentPattern  = regexp.MustCompile(`^;.*|#.*|(^|[^:])//.*`) // a leading ;, a #, or a // that is not in a URL
+	asnColumnNames  = []string{"asn", "as", "as_number", "as-number", "asnumber"}
+	cloudflareWords = []string{"ip.geoip.asnum", "ip.src.asnum", "in", "eq", "or", "and"} // ne and not would invert the list
 )
 
 // readASNFile adds the autonomous system numbers in the file at path to set,
@@ -41,12 +43,15 @@ func readASNFile(logger *slog.Logger, path string, set map[string]struct{}) erro
 	if !info.Mode().IsRegular() || info.Size() > maxListBytes {
 		return fmt.Errorf("asn_file: %s: not a regular file, or too large (%d MiB at most)", path, maxListBytes>>20)
 	}
-	f, err := os.Open(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("asn_file: %w", err)
 	}
-	defer f.Close()
-	data, err := io.ReadAll(io.LimitReader(f, maxListBytes+1))
+	defer file.Close()
+	if info, err = file.Stat(); err != nil || !info.Mode().IsRegular() { // the file that opened, not the path
+		return fmt.Errorf("asn_file: %s: not a regular file", path)
+	}
+	data, err := io.ReadAll(io.LimitReader(file, maxListBytes+1))
 	if err != nil {
 		return fmt.Errorf("asn_file: %w", err)
 	}
@@ -58,8 +63,8 @@ func readASNFile(logger *slog.Logger, path string, set map[string]struct{}) erro
 		return err
 	}
 	before := len(set)
-	for _, n := range asns {
-		set[strconv.FormatUint(uint64(n), 10)] = struct{}{}
+	for _, asn := range asns {
+		set[strconv.FormatUint(uint64(asn), 10)] = struct{}{}
 	}
 	logListAge(logger, path, len(set)-before, info.ModTime(), time.Now())
 	return nil
@@ -67,12 +72,12 @@ func readASNFile(logger *slog.Logger, path string, set map[string]struct{}) erro
 
 // parseASNList takes the AS numbers a list names explicitly: a JSON record's
 // asn member, a Cloudflare expression's numbers, the column a header names,
-// or a token marked AS. Failing those, a line may hold one number, or a
-// one-line file many. Anything else refuses, by line.
+// or a token marked AS. Failing those, a line may lead with one number, or a
+// one-line file hold many. Anything else refuses, by line.
 func parseASNList(path, text string) ([]uint32, error) {
 	p := &parser{path: path}
 	parse := p.parseText
-	if t := strings.TrimLeft(text, " \t\r\n"); t != "" && (t[0] == '{' || t[0] == '[') {
+	if start := strings.TrimLeft(text, " \t\r\n"); start != "" && (start[0] == '{' || start[0] == '[') {
 		parse = p.parseJSON
 	}
 	if err := parse(text); err != nil {
@@ -94,59 +99,84 @@ func (p *parser) refuse() error {
 	return fmt.Errorf("asn_file: %s: not an acceptable list, see README", p.path)
 }
 
-func (p *parser) fail(line int, tok string) error {
-	return fmt.Errorf("asn_file: %s:%d: invalid asn %.60q", p.path, line, tok)
+func (p *parser) fail(line int, text string) error {
+	return fmt.Errorf("asn_file: %s:%d: invalid asn %.60q", p.path, line, text)
 }
 
-func (p *parser) add(line int, toks ...string) error {
-	for _, t := range toks {
-		n, ok := parseASN(t)
+func (p *parser) add(line int, tokens ...string) error {
+	for _, token := range tokens {
+		asn, ok := parseASN(token)
 		if !ok {
-			return p.fail(line, t)
+			return p.fail(line, token)
 		}
-		p.asns = append(p.asns, uint32(n))
+		p.asns = append(p.asns, asn)
 	}
 	return nil
 }
 
 // parseJSON decodes the values in text, one document or one per line. An
 // object with an asn member is a record and yields it. One without, and
-// an array, is a container, and what it holds is read the same way.
+// an array, is a container, and what it holds is read the same way. A list
+// that opens the text is read one record at a time, so an error names the
+// record's line.
 func (p *parser) parseJSON(text string) error {
-	dec := json.NewDecoder(strings.NewReader(text))
-	dec.UseNumber()
-	for line, pos := 1, 0; ; {
-		var v any
-		if err := dec.Decode(&v); err == io.EOF {
+	decoder := json.NewDecoder(strings.NewReader(text))
+	decoder.UseNumber()
+	inList := strings.HasPrefix(strings.TrimLeft(text, " \t\r\n"), "[")
+	if inList {
+		_, _ = decoder.Token() // the [ that opens the list, seen on the line above
+	}
+	for line, offset := 1, 0; ; {
+		if inList && !decoder.More() {
+			if _, err := decoder.Token(); err != nil { // the ] that closes it
+				return fmt.Errorf("asn_file: %s:%d: list is not closed: %w", p.path, line, err)
+			}
+			inList = false
+		}
+		next := len(text) - len(strings.TrimLeft(text[decoder.InputOffset():], " \t\r\n,"))
+		line, offset = line+strings.Count(text[offset:next], "\n"), next
+		var value any
+		if err := decoder.Decode(&value); err == io.EOF && !inList {
 			return nil
 		} else if err != nil {
 			return fmt.Errorf("asn_file: %s:%d: %w", p.path, line, err)
 		}
-		if err := p.record(line, v); err != nil {
+		if err := p.record(line, value); err != nil {
 			return err
 		}
-		next := len(text) - len(strings.TrimLeft(text[dec.InputOffset():], " \t\r\n"))
-		line, pos = line+strings.Count(text[pos:next], "\n"), next
 	}
 }
 
-// record adds the asn member of v, or of each record inside v.
-func (p *parser) record(line int, v any) error {
-	switch v := v.(type) {
+// record adds the asn member of value, or of each record inside value. The
+// member goes by its name in any case and holds a number or a string, once.
+func (p *parser) record(line int, value any) error {
+	switch value := value.(type) {
 	case map[string]any:
-		for k, m := range v {
-			if strings.EqualFold(k, "asn") {
-				return p.add(line, fmt.Sprint(m))
+		var asn any
+		var found bool
+		for key, member := range value {
+			if strings.EqualFold(key, "asn") {
+				if found {
+					return fmt.Errorf("asn_file: %s:%d: asn is in the record twice", p.path, line)
+				}
+				asn, found = member, true
 			}
 		}
-		for _, m := range v {
-			if err := p.record(line, m); err != nil {
+		if found {
+			switch asn.(type) {
+			case json.Number, string:
+				return p.add(line, fmt.Sprint(asn))
+			}
+			return fmt.Errorf("asn_file: %s:%d: asn is not a number or a string", p.path, line)
+		}
+		for _, key := range slices.Sorted(maps.Keys(value)) { // sorted, so the same error is found each time
+			if err := p.record(line, value[key]); err != nil {
 				return err
 			}
 		}
 	case []any:
-		for _, m := range v {
-			if err := p.record(line, m); err != nil {
+		for _, item := range value {
+			if err := p.record(line, item); err != nil {
 				return err
 			}
 		}
@@ -156,10 +186,14 @@ func (p *parser) record(line int, v any) error {
 
 // parseText reads a Cloudflare expression, a headed table, or lines.
 func (p *parser) parseText(text string) error {
-	lines := strings.Split(text, "\n")
+	raw := strings.Split(text, "\n")
+	lines := make([]string, len(raw))
 	var rows []int // the lines that hold something once comments are cut
-	for i, l := range lines {
-		if lines[i] = comment.ReplaceAllString(strings.TrimSpace(l), "$1"); hasContent(lines[i]) {
+	for i, line := range raw {
+		if lines[i] = strings.TrimSpace(line); len(rows) > 0 || !isHashHeader(lines[i]) {
+			lines[i] = stripComment(lines[i])
+		}
+		if hasContent(lines[i]) {
 			rows = append(rows, i)
 		}
 	}
@@ -168,25 +202,25 @@ func (p *parser) parseText(text string) error {
 	}
 	if slices.ContainsFunc(rows, func(i int) bool { return strings.Contains(strings.ToLower(lines[i]), ".asnum") }) {
 		for _, i := range rows { // keywords and numbers only; ne and not would invert the list
-			for _, t := range tokens(lines[i]) {
-				if isASN(t) {
-					_ = p.add(i+1, t)
-				} else if !slices.Contains(cfWords, strings.ToLower(t)) {
+			for _, token := range tokenize(lines[i]) {
+				if isASN(token) {
+					_ = p.add(i+1, token) // token is an ASN, so add cannot fail
+				} else if !slices.Contains(cloudflareWords, strings.ToLower(token)) {
 					return p.refuse()
 				}
 			}
 		}
 		return nil
 	}
-	if head := tokens(lines[rows[0]]); named(head) >= 0 && !slices.ContainsFunc(head, isASN) {
-		delim := ' '
+	if header := tokenize(lines[rows[0]]); asnColumn(header) >= 0 && !slices.ContainsFunc(header, isASN) {
+		delimiter := ' '
 		if i := strings.IndexAny(lines[rows[0]], ",;\t|"); i >= 0 {
-			delim = rune(lines[rows[0]][i])
+			delimiter = rune(lines[rows[0]][i])
 		}
-		return p.parseCSV(text, delim, rows[0]+1)
+		return p.parseTable(raw, rows[0], delimiter)
 	}
 	for _, i := range rows {
-		asns, ok := pick(tokens(lines[i]), len(rows) == 1)
+		asns, ok := pick(tokenize(lines[i]), len(rows) == 1) // one line is no row of columns, and may hold many
 		if !ok {
 			return p.fail(i+1, lines[i])
 		}
@@ -197,91 +231,126 @@ func (p *parser) parseText(text string) error {
 	return nil
 }
 
-// parseCSV reads the cell a header names from each row from line hdr on.
-// CSV quoting lets a cell hold the delimiter, so the text is read raw and
-// comments are cut from the one cell; a row that holds nothing is a divider.
-func (p *parser) parseCSV(text string, delim rune, hdr int) error {
-	r := csv.NewReader(strings.NewReader(text))
-	r.Comma, r.LazyQuotes, r.FieldsPerRecord, r.ReuseRecord, r.TrimLeadingSpace = delim, true, -1, true, true
-	for col := -1; ; {
-		rec, err := r.Read()
-		line, _ := r.FieldPos(0)
+// isHashHeader reports whether line is a header whose first column is named
+// #, as a rank is (#;ASN, Organization name;Country), and so not a comment.
+func isHashHeader(line string) bool {
+	if len(line) < 2 || line[0] != '#' || !strings.ContainsRune(",;\t|", rune(line[1])) {
+		return false
+	}
+	header := tokenize(stripComment(line[2:]))
+	return asnColumn(header) >= 0 && !slices.ContainsFunc(header, isASN)
+}
+
+// parseTable reads the cell a header names from each row under it, header
+// being that header's line. The reader is given one line at a time, so a quote
+// left open cannot take the rows after it. A line that is not CSV is cells
+// joined as they are, as a publisher who quotes nothing writes them, unless its
+// quotes are odd in number: that may be a cell that runs on to the next line.
+func (p *parser) parseTable(raw []string, header int, delimiter rune) error {
+	var source strings.Reader
+	buffer := bufio.NewReader(&source)
+	reader := csv.NewReader(buffer)
+	reader.Comma, reader.FieldsPerRecord, reader.TrimLeadingSpace, reader.ReuseRecord = delimiter, -1, delimiter != '\t', true
+	indent := " \t"
+	if delimiter == '\t' {
+		indent = " " // a tab that leads a tab-separated row is an empty cell
+	}
+	for column, width, i := -1, 0, header; i < len(raw); i++ {
+		row := strings.TrimRight(strings.TrimLeft(raw[i], indent), " \r")
+		if i == header && !isHashHeader(row) {
+			row = strings.TrimRight(stripComment(row), " ") // the header as parseText found it
+		} else if i > header && (row == "" || row[0] == '#' || strings.HasPrefix(row, "//") || row[0] == ';' && delimiter != ';') {
+			continue // a comment, which a ; is only where it does not split the cells
+		}
+		source.Reset(row)
+		buffer.Reset(&source)
+		cells, err := reader.Read()
+		if err != nil && strings.Count(row, `"`)%2 == 0 {
+			cells, err = strings.Split(row, string(delimiter)), nil
+		}
 		switch {
-		case err == io.EOF:
-			return nil
 		case err != nil:
-			return fmt.Errorf("asn_file: %s:%d: %w", p.path, line, err)
-		case line < hdr: // a comment
-		case col < 0:
-			if col = named(rec); delim == ' ' && col > 0 {
-				r.FieldsPerRecord = len(rec) // unquoted spaces before the cell would shift it
+			return p.fail(i+1, row)
+		case i == header:
+			if column, width = asnColumn(cells), len(cells); column < 0 {
+				return p.refuse()
 			}
-		case slices.ContainsFunc(rec, hasContent):
-			cell := ""
-			if col < len(rec) {
-				cell = comment.ReplaceAllString(rec[col], "$1")
-			}
-			asns, ok := pick(tokens(cell), false)
+		case !slices.ContainsFunc(cells, hasContent): // a divider
+		case column > 0 && len(cells) != width: // a delimiter in a cell before the ASN's would shift it
+			return p.fail(i+1, row)
+		default:
+			asns, ok := pick(tokenize(stripComment(cells[column])), false)
 			if !ok {
-				return p.fail(line, strings.Join(rec, string(delim)))
+				return p.fail(i+1, row)
 			}
-			if err := p.add(line, asns...); err != nil {
+			if err := p.add(i+1, asns...); err != nil {
 				return err
 			}
 		}
 	}
+	return nil
 }
 
-// pick is the ASNs among the tokens of a line or cell: all of them when a
-// one-line file holds only numbers, else the first marked AS, else the only
-// bare number. Two bare numbers are a rank or a count beside an ASN, and
-// nothing says which.
-func pick(toks []string, oneLine bool) ([]string, bool) {
-	if oneLine && len(toks) > 0 && !slices.ContainsFunc(toks, func(t string) bool { return !isASN(t) }) {
-		return toks, true
+// pick is the ASNs among the tokens of a line or cell: all of them in a
+// one-line file of nothing else, else one. A number marked AS that leads is
+// the ASN when words follow it, its name, or every other token is the same
+// number. Words lead only one marked number. A bare number leads, and is the
+// only number. Anything else is a rank, a count, or a second ASN, and is
+// refused.
+func pick(tokens []string, many bool) ([]string, bool) {
+	if len(tokens) > 1 && strings.EqualFold(tokens[0], "AS") {
+		tokens = tokens[1:] // AS 1221
 	}
-	if i := slices.IndexFunc(toks, isMarked); i >= 0 {
-		return toks[i : i+1], true
+	if len(tokens) == 0 {
+		return nil, false
 	}
-	bare, n := -1, 0
-	for i, t := range toks {
-		if isASN(t) {
-			bare, n = i, n+1
-		}
+	asns := slices.DeleteFunc(slices.Clone(tokens), func(token string) bool { return !isASN(token) })
+	allSame := !slices.ContainsFunc(asns, func(asn string) bool { return !sameASN(asn, asns[0]) })
+	marked := slices.IndexFunc(tokens, isMarked) // where the first number marked AS is, or -1
+	switch {
+	case many && len(asns) == len(tokens):
+		return tokens, true
+	case marked == 0: // AS201011 AS33891 Netzbetrieb GmbH, AS42772 AS42772, but not AS1 AS2
+		return tokens[:1], allSame || len(asns) < len(tokens)
+	case marked > 0 && !isASN(tokens[0]): // Telstra AS1221, Level 3 AS3356, but not Contabo to AS1299 AS51167
+		others := slices.DeleteFunc(asns, func(asn string) bool { return !isMarked(asn) })
+		return tokens[marked : marked+1], !slices.ContainsFunc(others, func(asn string) bool { return !sameASN(asn, tokens[marked]) })
 	}
-	return toks[max(bare, 0) : bare+1], n == 1
+	return tokens[:1], marked < 0 && len(asns) == 1 && isASN(tokens[0]) // 1221 Telstra, but not 1 AS4134 or Total: 934
 }
 
-// tokens splits a line at every separator, pipes included for Markdown.
-func tokens(l string) []string {
-	toks := strings.FieldsFunc(l, func(r rune) bool { return strings.ContainsRune(" \t,;|", r) })
-	for k, t := range toks {
-		toks[k] = strings.Trim(t, `"'(){}[]`)
+// tokenize splits a line at every separator, pipes included for Markdown.
+func tokenize(line string) []string {
+	tokens := strings.FieldsFunc(line, func(r rune) bool { return strings.ContainsRune(" \t,;|", r) })
+	for i, token := range tokens {
+		tokens[i] = strings.Trim(token, `"'(){}[]`)
 	}
-	return slices.DeleteFunc(toks, func(t string) bool { return t == "" })
+	return slices.DeleteFunc(tokens, func(token string) bool { return token == "" })
 }
 
-// named is the index of the column whose words name the ASN, or -1.
-func named(h []string) int {
-	return slices.IndexFunc(h, func(c string) bool {
-		return slices.ContainsFunc(strings.Fields(c), func(t string) bool { return slices.Contains(colNames, strings.ToLower(t)) })
+// asnColumn is the index of the cell whose words name the ASN, or -1.
+func asnColumn(cells []string) int {
+	return slices.IndexFunc(cells, func(cell string) bool {
+		return slices.ContainsFunc(tokenize(cell), func(word string) bool { return slices.Contains(asnColumnNames, strings.ToLower(word)) })
 	})
 }
 
-// hasContent reports whether s holds a letter or digit: a divider does not.
-func hasContent(s string) bool {
-	return strings.ContainsFunc(s, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) })
+// hasContent reports whether text holds a letter or digit: a divider does not.
+func hasContent(text string) bool {
+	return strings.ContainsFunc(text, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) })
 }
 
-func isASN(t string) bool    { _, ok := parseASN(t); return ok }
-func isMarked(t string) bool { return hasAS(t) && isASN(t) }
-func hasAS(s string) bool    { return len(s) > 2 && strings.EqualFold(s[:2], "AS") }
+func stripComment(text string) string { return commentPattern.ReplaceAllString(text, "$1") } // $1 keeps the character ahead of a //
+func isASN(token string) bool         { _, ok := parseASN(token); return ok }
+func isMarked(token string) bool      { return hasAS(token) && isASN(token) }
+func hasAS(token string) bool         { return len(token) > 2 && strings.EqualFold(token[:2], "AS") }
+func sameASN(a, b string) bool        { x, _ := parseASN(a); y, _ := parseASN(b); return x == y }
 
 // parseASN parses an asplain AS number (RFC 5396), 1 to 4294967295, AS prefix or not.
-func parseASN(s string) (uint64, bool) {
-	if hasAS(s) {
-		s = s[2:]
+func parseASN(token string) (uint32, bool) {
+	if hasAS(token) {
+		token = token[2:]
 	}
-	n, err := strconv.ParseUint(s, 10, 32)
-	return n, err == nil && n != 0
+	number, err := strconv.ParseUint(token, 10, 32)
+	return uint32(number), err == nil && number != 0
 }
