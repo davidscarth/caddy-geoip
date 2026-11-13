@@ -111,6 +111,10 @@ which scopes the codes. `match_unknown` is optional on the geolocation matchers.
 The first few examples use Windows paths, which need quotes. The rest use
 `geoipupdate`'s default Linux directory. Either style works anywhere.
 
+Caddy runs `handle` and `route` blocks before `abort` and `respond`, which can
+skip the geo rule. If your site uses them, wrap it all in one `route` block
+with the geo rule first, or use the `order` global option.
+
 #### Deny list
 
 Drop the connection for these countries:
@@ -123,10 +127,9 @@ Drop the connection for these countries:
 abort @blocked
 ```
 
-Caddy sorts directives and runs `handle` and `route` blocks before `abort`
-and `respond`. If your site uses them, put the geo rule first inside a
-`route` block. Otherwise those blocks serve the request first, and blocked
-visitors get the site as if the rule were not there.
+An address the database has no record for is not in any listed country, so it
+passes. That covers your LAN and unallocated space. Add `match_unknown` to deny
+those too.
 
 #### Allow list
 
