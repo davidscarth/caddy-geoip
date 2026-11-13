@@ -25,8 +25,8 @@ refuses the rest.
 | GeoIP City Shield | paid | yes | yes | - | - | see 1 |
 | GeoIP Enterprise Shield | paid | yes | yes | yes | - | see 1 |
 | GeoIP2 Anonymous IP | paid | - | - | - | yes | |
-| GeoIP Anonymous Plus | paid | - | - | - | yes | extra fields ignored |
-| GeoIP2 IP Risk | paid | - | - | - | yes | score ignored |
+| GeoIP Anonymous Plus | paid | - | - | - | yes | carries confidence |
+| GeoIP2 IP Risk | paid | - | - | - | yes | carries confidence and risk |
 | GeoIP Residential Proxy | paid | - | - | - | - | see 2 |
 | GeoIP Regions | paid | - | - | - | - | see 2 |
 | GeoIP2 Connection Type | paid | - | - | - | - | see 2 |
@@ -50,8 +50,7 @@ convenience. Results may change with any update on their side.
 The matchers read MaxMind's GeoIP2 record layout: `country.iso_code`,
 `subdivisions[].iso_code`, `autonomous_system_number`, and the `is_*`
 anonymizer flags. A file that uses that layout will work regardless of who
-built it. A file that doesn't will still load, since the type check only
-looks at the database name, but then it won't work.
+built it.
 
 | File | License | Matcher | Seems to work | Notes |
 |---|---|---|---|---|
@@ -98,18 +97,25 @@ accepts a few forms:
 
 - plain numbers (`14061`)
 - numbers with names (`AS14061 DigitalOcean, LLC` or `14061 # DigitalOcean`)
-- CSV with a header (`ASN,Entity`)
-- Spamhaus ASN-DROP's JSON lines (`{"asn":14061,...}`)
+- CSV with a header (`ASN,Entity`, `rank,asn,name`, or `#;ASN;...` on a ranked
+  list)
+- Spamhaus ASN-DROP's JSON lines (`{"asn":14061,...}`), or a JSON array
+- Cloudflare expressions (`(ip.geoip.asnum in { 14061 16509 })`)
 
-The parser expects the number first on every line, `AS` prefix or not,
-and ignores whatever follows a space, tab, comma, semicolon, `#`, or `//`.
-Blank lines, lines starting with `;`, and a CSV header on the first line
-are skipped. Any other line that does not start with a
-number is an error at load, naming the file and line. So is a line of
-several different ASNs (`14061,16509`), a file over 16 MiB, or binary
-data. An RIR or NRO delegated statistics file is refused with a note to
-filter it down to the ASNs you want. None of the forms is preferred, use
-whichever one you like.
+None of the forms is preferred, use whichever one you like.
+
+A number is an ASN when something defines it: the JSON member, the expression,
+the header's column, or an `AS` prefix. Otherwise a bare number at the start
+of each line, or a one-line file with many numbers. `#` and `//` start a
+comment anywhere, a line starting with `;` is a comment, and blank lines are
+skipped.
+
+Anything not accepted is an error at load, naming the file and line, and the
+config is refused. Some refusal examples: a line with two bare numbers and
+nothing to say which is the ASN, a line with no number, a file over 16 MiB,
+binary data, or an expression with `ne` or `not` (which would invert the list).
+A ranked list needs its header, and inside a `;`-delimited table a `; note`
+line is a row, not a comment.
 
 | List | Format | ASNs | Stands in for |
 |---|---|---|---|

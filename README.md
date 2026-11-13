@@ -38,39 +38,39 @@ Requires Go 1.26.0 or later to build.
 @name geoip_country {
 	db <path>
 	country <codes...>
-	match_unknown
+	match_unknown		# optional
 }
 
 @name geoip_subdivision {
 	db <path>
 	country <code>
 	subdivision <codes...>
-	match_unknown
+	match_unknown		# optional
 }
 
 @name geoip_asn {
 	db <path>
-	asn <numbers...>
-	asn_file <paths...>
-	match_unknown
+	asn <numbers...>	# at least one of asn or asn_file
+	asn_file <paths...>	# at least one of asn or asn_file
+	match_unknown		# optional
 }
 
 @name geoip_anonymous {
 	db <path>
-	type <kinds...>
+	type <kinds...>		# at least one of type or risk
+	confidence <1-99>	# optional
+	risk <1-99>		# at least one of type or risk
 }
 ```
 
-`db` is required on every matcher, along with at least one `country`,
-`subdivision`, `asn` (or an `asn_file`), or `type`. `geoip_subdivision` also
-requires `country`, which scopes the codes. `match_unknown` is optional on the
-geolocation matchers.
+`db` is required on every matcher. `geoip_subdivision` also requires `country`,
+which scopes the codes. `match_unknown` is optional on the geolocation matchers.
 
 - **db** - path to a Country, City, or Enterprise database for `geoip_country`,
   a City or Enterprise database for `geoip_subdivision`, or an ASN, ISP, or
   Enterprise database for `geoip_asn`. The database type is checked when the
   config loads, so a Country file is not silently used for ASN matching or vice
-  versa. Placeholders such as `{env.GEOIP_DB}` are resolved.
+  versa.
 - **country** - ISO 3166-1 alpha-2 codes, case-insensitive. On
   `geoip_subdivision` it is a single code, because subdivision codes are only
   unique within a country.
@@ -80,17 +80,23 @@ geolocation matchers.
 - **asn** - autonomous system numbers as plain integers, no `AS` prefix.
 - **asn_file** - one or more files of autonomous system numbers, added to any
   `asn` list. Several paths can go on one `asn_file` line, or on separate
-  lines. Files are UTF-8 text with one ASN per line, with or without `AS` in
-  front. Anything after a space, tab, comma, or semicolon is ignored, so a
-  list with names or a CSV loads as published. Spamhaus ASN-DROP's JSON lines
-  load too. `#` and `//` start a comment anywhere on a line, a line starting
-  with `;` is a comment, and blank lines and a header on the first line of
-  each file are skipped. A file that doesn't follow these rules will return
-  an error and fail to load.
+  lines. Files are UTF-8 text. A number counts as an ASN when something defines
+  it: a JSON record's `asn` member, a Cloudflare expression's `.asnum` field, a
+  header naming the column, or an `AS` prefix. Otherwise the number leads its
+  line, alone, or a one-line file holds many. A line with two bare numbers,
+  such as a rank or a count beside an ASN, is an error naming the line, since
+  nothing says which is which. `#` and `//` start a comment anywhere on a line,
+  a line starting with `;` is a comment, and blank lines are skipped. The forms
+  tested are in [docs/sources.md](docs/sources.md#lists-for-asn_file).
 - **type** - kinds of anonymizer to match, any of `anonymous`, `vpn`, `tor`,
   `hosting`, `public_proxy`, `residential_proxy`. These are MaxMind's
   Anonymous IP flags (`anonymous` is the umbrella, set whenever any other is).
   Needs an Anonymous IP, Anonymous Plus, or IP Risk database.
+- **confidence** - for `public_proxy` and `residential_proxy`, the least
+  confidence a record must carry to count, 1 to 99. A record with no confidence
+  is unaffected. Needs an Anonymous Plus or IP Risk database.
+- **risk** - match any address whose risk score is at least this, 1 to 99.
+  Needs an IP Risk database, and may be used without `type`.
 - **match_unknown** - use with caution. Matches IPs the database has no entry
   for (loopback, private ranges, unallocated space), so `country US` with
   `match_unknown` matches a US client and your LAN. On `geoip_subdivision` a
@@ -209,10 +215,9 @@ abort @hosting
 
 #### Block networks from a list
 
-`asn_file` takes any list of autonomous system numbers, one per line, as
-published. This example uses [ASN-DROP](https://www.spamhaus.org/drop/),
-Spamhaus's list of networks run by spammers and cybercriminals, a few
-hundred ASNs, free to use:
+`asn_file` takes any list of autonomous system numbers as published. This
+example uses [ASN-DROP](https://www.spamhaus.org/drop/), Spamhaus's list of
+networks run by spammers and cybercriminals, a few hundred ASNs, free to use:
 
 ```caddyfile
 @asndrop geoip_asn {
@@ -283,7 +288,9 @@ ISO codes and AS number, or are empty if unknown. `{geoip.anonymous}` holds
 the kinds the client is flagged with, comma-separated in the order listed
 under **type** (`anonymous,vpn,tor`), or is empty. Each is set by the
 corresponding matcher when it runs. `geoip_subdivision` sets both of the first
-two, since it reads both from one record.
+two, since it reads both from one record. `{geoip.confidence}` and
+`{geoip.risk}` hold the record's anonymizer confidence and risk score when the
+database carries them, or are empty.
 
 A matcher that finds nothing writes nothing. A matcher that finds a record
 writes the whole record. When two matchers write the same placeholder, the last
@@ -327,9 +334,9 @@ one to run wins.
   --force` after replacing the file (since the Caddyfile is unchanged on just a
   database update, need --force to actually make the reload happen).
 - **Never overwrite the database file in place while Caddy is running.** The
-  server reads it through a shared memory mapping, so writing into it can
-  crash Caddy or corrupt lookups. Either stop Caddy first, or replace atomically,
-  which is what `geoipupdate` does by default.
+  server reads it through a shared memory mapping, so writing into it can crash
+  Caddy or corrupt lookups. Either stop Caddy first, or replace atomically,
+  which `geoipupdate` does by default. On Windows, stop Caddy to replace.
 
 ## JSON
 
@@ -356,6 +363,9 @@ one to run wins.
 }
 ```
 
+The Caddyfile's `match_unknown` is `"match_unknown": true`. `confidence` and
+`risk` are `"min_confidence"` and `"min_risk"`.
+
 ## Out of scope
 
 City-level matching, database auto-download, and rich placeholders (city name,
@@ -367,8 +377,8 @@ Database updates are either manually placed or
 
 ## Checks
 
-Built and tested against Caddy v2.11.7 and maxminddb-golang v2.9.0, with no
-other direct dependencies.
+Requires Caddy v2.11.6 or later and maxminddb-golang v2.9.0, with no other
+direct dependencies. Built and tested against the current Caddy release.
 
 The code passes:
 
@@ -377,18 +387,13 @@ The code passes:
 - `govulncheck ./...` with no reachable vulnerabilities
 - CodeQL via GitHub code scanning
 
-Tested against MaxMind's official test databases, and running in production
-with the free GeoLite2 editions.
-
 ## Other data sources
 
 Any MMDB file works if it also uses MaxMind's schema, regardless of who made
 it. The format defines the container but not the fields inside, and those
 names inside are the part that matters. The matchers read `country.iso_code`,
 `subdivisions[].iso_code`, `autonomous_system_number`, and the `is_*`
-anonymizer flags (GeoLite2/GeoIP2 style). A file with different names still
-loads, since the type check only looks at the database name, but it won't work
-right (every address is unknown). `asn_file` takes any published ASN list.
+anonymizer flags (GeoLite2/GeoIP2 style).
 
 See [docs/sources.md](docs/sources.md) for what's been tested, what each list
 stands in for, and free substitutes.
