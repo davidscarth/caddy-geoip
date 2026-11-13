@@ -21,7 +21,7 @@ import (
 	"github.com/caddyserver/caddy/v2"
 )
 
-const maxListBytes = 16 << 20
+const maxListBytes = 8 << 20
 
 var (
 	commentPattern  = regexp.MustCompile(`^;.*|#.*|(^|[^:])//.*`) // a leading ;, a #, or a // that is not in a URL

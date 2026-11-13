@@ -112,7 +112,7 @@ skipped.
 
 Anything not accepted is an error at load, naming the file and line, and the
 config is refused. Some refusal examples: a line with two bare numbers and
-nothing to say which is the ASN, a line with no number, a file over 16 MiB,
+nothing to say which is the ASN, a line with no number, a file over 8 MiB,
 binary data, or an expression with `ne` or `not` (which would invert the list).
 A ranked list needs its header, and inside a `;`-delimited table a `; note`
 line is a row, not a comment.

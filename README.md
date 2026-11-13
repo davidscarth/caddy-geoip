@@ -123,9 +123,10 @@ Drop the connection for these countries:
 abort @blocked
 ```
 
-An address the database has no record for is not in any listed country, so it
-passes. That covers your LAN and unallocated space. Add `match_unknown` to deny
-those too.
+Caddy sorts directives and runs `handle` and `route` blocks before `abort`
+and `respond`. If your site uses them, put the geo rule first inside a
+`route` block. Otherwise those blocks serve the request first, and blocked
+visitors get the site as if the rule were not there.
 
 #### Allow list
 
@@ -144,7 +145,7 @@ would be blocked; exempt it with Caddy's `client_ip private_ranges`:
 abort @outside
 ```
 
-We avoid `match_unknown` in the example above because it makes the allow
+We avoid using `match_unknown` in the example above because it makes the allow
 list fail open. `client_ip private_ranges` here exempts only the LAN.
 
 #### Friendlier responses
