@@ -77,8 +77,7 @@ All MMDB format, checked with October 2026 files.
    the same two flags, `anonymous` and `public_proxy`. `type vpn` or
    `type tor` match nothing. Use `type anonymous` as a block-all-known-
    proxies switch.
-4. Own record layout (e.g. `country_code`), so the file loads but every
-   address is unknown.
+4. Own record layout (e.g. `country_code`). Unusable.
 5. Built by the plugin author. Experimental, and may change or go away.
 
 #### Checking a file yourself
